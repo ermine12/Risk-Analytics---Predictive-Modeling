@@ -32,13 +32,15 @@ def prepare_features(df: pd.DataFrame) -> tuple:
     if df.empty:
         return None, None, None, None
     
-    # Assuming 'charges' is the target (total claims)
-    if 'charges' not in df.columns:
-        print("Warning: 'charges' column not found")
+    # Use 'TotalClaims' as the target
+    target_col = 'TotalClaims'
+    if target_col not in df.columns:
+        print(f"Warning: '{target_col}' column not found")
         return None, None, None, None
     
-    # Select features (exclude target)
-    feature_cols = [col for col in df.columns if col != 'charges']
+    # Select features (exclude target and premium-related columns)
+    exclude_cols = [target_col, 'TotalPremium', 'loss_ratio', 'PolicyID']
+    feature_cols = [col for col in df.columns if col not in exclude_cols]
     
     # Encode categorical variables
     df_encoded = df.copy()
@@ -49,10 +51,10 @@ def prepare_features(df: pd.DataFrame) -> tuple:
             df_encoded = pd.get_dummies(df_encoded, columns=[col], prefix=col, drop_first=True)
     
     # Update feature columns after encoding
-    feature_cols = [col for col in df_encoded.columns if col != 'charges']
+    feature_cols = [col for col in df_encoded.columns if col not in exclude_cols]
     
     X = df_encoded[feature_cols]
-    y = df_encoded['charges']
+    y = df_encoded[target_col]
     
     return X, y, feature_cols, df_encoded
 
@@ -60,7 +62,7 @@ def prepare_features(df: pd.DataFrame) -> tuple:
 def train_model(X: pd.DataFrame, y: pd.Series) -> RandomForestRegressor:
     """Train Random Forest model for claims prediction."""
     model = RandomForestRegressor(
-        n_estimators=100,
+        n_estimators=200,  # As per requirements
         max_depth=10,
         random_state=RANDOM_SEED,
         n_jobs=-1
@@ -139,6 +141,38 @@ def main():
     with open(metrics_path, 'w') as f:
         json.dump(metrics, f, indent=2)
     print(f"Metrics saved to {metrics_path}")
+    
+    # Calculate and save SHAP feature importance
+    try:
+        import shap
+        print("Calculating SHAP feature importance...")
+        
+        # Use a sample for SHAP (faster)
+        sample_size = min(100, len(X_test))
+        X_sample = X_test.iloc[:sample_size]
+        
+        explainer = shap.TreeExplainer(model)
+        shap_values = explainer.shap_values(X_sample)
+        
+        # Calculate mean absolute SHAP values
+        if isinstance(shap_values, list):
+            shap_values = shap_values[0]  # For regression, take first array
+        
+        feature_importance = pd.DataFrame({
+            'feature': X_sample.columns,
+            'importance': np.abs(shap_values).mean(axis=0)
+        }).sort_values('importance', ascending=False)
+        
+        shap_path = INTERIM_REPORTS_DIR / "claims_model_shap_importance.csv"
+        feature_importance.to_csv(shap_path, index=False)
+        print(f"SHAP feature importance saved to {shap_path}")
+        print("\nTop 10 Most Important Features (SHAP):")
+        print(feature_importance.head(10).to_string(index=False))
+        
+    except ImportError:
+        print("SHAP not available, skipping feature importance analysis")
+    except Exception as e:
+        print(f"Error calculating SHAP: {e}")
 
 
 if __name__ == "__main__":

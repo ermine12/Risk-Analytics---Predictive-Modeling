@@ -45,54 +45,108 @@ def generate_summary_statistics(df: pd.DataFrame) -> dict:
 
 
 def create_visualizations(df: pd.DataFrame, output_dir: Path):
-    """Create EDA visualizations."""
+    """Create EDA visualizations - 3 creative plots."""
     if df.empty:
         print("No data available for visualization")
         return
     
     plt.style.use('seaborn-v0_8')
     
-    # 1. Distribution of charges (target variable)
-    if 'charges' in df.columns:
-        fig, ax = plt.subplots(figsize=FIGURE_SIZE)
-        df['charges'].hist(bins=50, ax=ax, edgecolor='black')
-        ax.set_title('Distribution of Insurance Charges', fontsize=14, fontweight='bold')
-        ax.set_xlabel('Charges ($)', fontsize=12)
-        ax.set_ylabel('Frequency', fontsize=12)
-        plt.tight_layout()
-        plt.savefig(output_dir / 'charges_distribution.png', dpi=300, bbox_inches='tight')
-        plt.close()
+    # 1. Loss Ratio by Province (Creative Plot 1)
+    if 'Province' in df.columns and 'loss_ratio' in df.columns:
+        prov = df.groupby('Province').agg({
+            'TotalClaims': 'sum' if 'TotalClaims' in df.columns else 'count',
+            'TotalPremium': 'sum' if 'TotalPremium' in df.columns else 'count'
+        })
+        if 'TotalPremium' in prov.columns and 'TotalClaims' in prov.columns:
+            prov['loss_ratio'] = prov['TotalClaims'] / prov['TotalPremium'].replace(0, np.nan)
+            prov_sorted = prov.sort_values('loss_ratio')
+            
+            fig, ax = plt.subplots(figsize=(14, 8))
+            colors = plt.cm.RdYlGn_r(np.linspace(0.2, 0.8, len(prov_sorted)))
+            bars = ax.barh(prov_sorted.index, prov_sorted['loss_ratio'], color=colors)
+            ax.set_xlabel('Loss Ratio', fontsize=12, fontweight='bold')
+            ax.set_ylabel('Province', fontsize=12, fontweight='bold')
+            ax.set_title('Loss Ratio by Province (Lower is Better)', 
+                        fontsize=16, fontweight='bold', pad=20)
+            ax.axvline(x=prov_sorted['loss_ratio'].median(), color='red', 
+                      linestyle='--', linewidth=2, label='Median')
+            ax.legend()
+            plt.tight_layout()
+            plt.savefig(output_dir / 'loss_ratio_by_province.png', dpi=300, bbox_inches='tight')
+            plt.close()
+            print("Created: Loss Ratio by Province plot")
     
-    # 2. Correlation heatmap
+    # 2. Distribution of Total Claims with Vehicle Age Overlay (Creative Plot 2)
+    if 'TotalClaims' in df.columns:
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+        
+        # Left: Distribution of claims
+        ax1.hist(df['TotalClaims'], bins=50, edgecolor='black', alpha=0.7, color='steelblue')
+        ax1.set_xlabel('Total Claims ($)', fontsize=12, fontweight='bold')
+        ax1.set_ylabel('Frequency', fontsize=12, fontweight='bold')
+        ax1.set_title('Distribution of Total Claims', fontsize=14, fontweight='bold')
+        ax1.axvline(df['TotalClaims'].mean(), color='red', linestyle='--', 
+                   linewidth=2, label=f'Mean: ${df["TotalClaims"].mean():,.0f}')
+        ax1.legend()
+        
+        # Right: Claims by Vehicle Age (if available)
+        if 'VehicleAge' in df.columns:
+            age_bins = pd.cut(df['VehicleAge'], bins=10)
+            age_claims = df.groupby(age_bins)['TotalClaims'].mean()
+            ax2.bar(range(len(age_claims)), age_claims.values, 
+                   color='coral', edgecolor='black')
+            ax2.set_xlabel('Vehicle Age (years)', fontsize=12, fontweight='bold')
+            ax2.set_ylabel('Average Total Claims ($)', fontsize=12, fontweight='bold')
+            ax2.set_title('Average Claims by Vehicle Age', fontsize=14, fontweight='bold')
+            ax2.set_xticks(range(len(age_claims)))
+            ax2.set_xticklabels([f"{int(interval.left)}-{int(interval.right)}" 
+                                for interval in age_claims.index], rotation=45, ha='right')
+        else:
+            ax2.text(0.5, 0.5, 'Vehicle Age data not available', 
+                    ha='center', va='center', transform=ax2.transAxes, fontsize=12)
+            ax2.set_title('Vehicle Age Analysis', fontsize=14, fontweight='bold')
+        
+        plt.tight_layout()
+        plt.savefig(output_dir / 'claims_distribution_analysis.png', dpi=300, bbox_inches='tight')
+        plt.close()
+        print("Created: Claims Distribution Analysis plot")
+    
+    # 3. Loss Ratio Heatmap by Vehicle Type and Province (Creative Plot 3)
+    if 'VehicleType' in df.columns and 'Province' in df.columns and 'loss_ratio' in df.columns:
+        pivot_data = df.groupby(['Province', 'VehicleType']).agg({
+            'TotalClaims': 'sum' if 'TotalClaims' in df.columns else 'count',
+            'TotalPremium': 'sum' if 'TotalPremium' in df.columns else 'count'
+        }).reset_index()
+        
+        if 'TotalPremium' in pivot_data.columns and 'TotalClaims' in pivot_data.columns:
+            pivot_data['loss_ratio'] = pivot_data['TotalClaims'] / pivot_data['TotalPremium'].replace(0, np.nan)
+            pivot_table = pivot_data.pivot(index='Province', columns='VehicleType', values='loss_ratio')
+            
+            fig, ax = plt.subplots(figsize=(14, 10))
+            sns.heatmap(pivot_table, annot=True, fmt='.3f', cmap='RdYlGn_r', 
+                       center=pivot_table.values[~np.isnan(pivot_table.values)].mean(),
+                       ax=ax, cbar_kws={'label': 'Loss Ratio'}, linewidths=0.5)
+            ax.set_title('Loss Ratio Heatmap: Province × Vehicle Type', 
+                        fontsize=16, fontweight='bold', pad=20)
+            ax.set_xlabel('Vehicle Type', fontsize=12, fontweight='bold')
+            ax.set_ylabel('Province', fontsize=12, fontweight='bold')
+            plt.tight_layout()
+            plt.savefig(output_dir / 'loss_ratio_heatmap.png', dpi=300, bbox_inches='tight')
+            plt.close()
+            print("Created: Loss Ratio Heatmap plot")
+    
+    # 4. Correlation heatmap (bonus)
     numerical_cols = df.select_dtypes(include=[np.number]).columns
     if len(numerical_cols) > 1:
-        fig, ax = plt.subplots(figsize=FIGURE_SIZE)
+        fig, ax = plt.subplots(figsize=(12, 10))
         corr_matrix = df[numerical_cols].corr()
         sns.heatmap(corr_matrix, annot=True, fmt='.2f', cmap='coolwarm', 
-                   center=0, ax=ax, square=True)
+                   center=0, ax=ax, square=True, linewidths=0.5)
         ax.set_title('Correlation Heatmap of Numerical Features', 
                     fontsize=14, fontweight='bold')
         plt.tight_layout()
         plt.savefig(output_dir / 'correlation_heatmap.png', dpi=300, bbox_inches='tight')
-        plt.close()
-    
-    # 3. Box plots for categorical vs numerical
-    categorical_cols = df.select_dtypes(include=['object']).columns
-    if len(categorical_cols) > 0 and 'charges' in df.columns:
-        n_cats = len(categorical_cols)
-        fig, axes = plt.subplots(1, min(n_cats, 3), figsize=(15, 5))
-        if n_cats == 1:
-            axes = [axes]
-        
-        for idx, col in enumerate(categorical_cols[:3]):
-            df.boxplot(column='charges', by=col, ax=axes[idx] if n_cats > 1 else axes[0])
-            if n_cats > 1:
-                axes[idx].set_title(f'Charges by {col}')
-            else:
-                axes[0].set_title(f'Charges by {col}')
-        
-        plt.tight_layout()
-        plt.savefig(output_dir / 'categorical_boxplots.png', dpi=300, bbox_inches='tight')
         plt.close()
 
 
@@ -105,22 +159,135 @@ def perform_hypothesis_tests(df: pd.DataFrame) -> dict:
     
     from scipy import stats
     
-    # Example: Test if smokers have significantly higher charges
-    if 'smoker' in df.columns and 'charges' in df.columns:
-        smoker_charges = df[df['smoker'] == 'yes']['charges'] if 'yes' in df['smoker'].values else pd.Series()
-        non_smoker_charges = df[df['smoker'] == 'no']['charges'] if 'no' in df['smoker'].values else pd.Series()
+    # Test 1: Loss ratio by Province
+    if 'Province' in df.columns and 'loss_ratio' in df.columns:
+        prov = df.groupby('Province').agg({
+            'TotalClaims': 'sum' if 'TotalClaims' in df.columns else 'count',
+            'TotalPremium': 'sum' if 'TotalPremium' in df.columns else 'count'
+        })
+        if 'TotalPremium' in prov.columns and 'TotalClaims' in prov.columns:
+            prov['loss_ratio'] = prov['TotalClaims'] / prov['TotalPremium'].replace(0, np.nan)
+            prov_sorted = prov.sort_values('loss_ratio')
+            
+            # Test if lowest province has significantly lower loss ratio
+            if len(prov_sorted) >= 2:
+                lowest_prov = prov_sorted.index[0]
+                highest_prov = prov_sorted.index[-1]
+                
+                lowest_data = df[df['Province'] == lowest_prov]['loss_ratio'].dropna()
+                highest_data = df[df['Province'] == highest_prov]['loss_ratio'].dropna()
+                
+                if len(lowest_data) > 0 and len(highest_data) > 0:
+                    t_stat, p_value = stats.ttest_ind(lowest_data, highest_data)
+                    results['province_loss_ratio_comparison'] = {
+                        'lowest_province': lowest_prov,
+                        'highest_province': highest_prov,
+                        't_statistic': float(t_stat),
+                        'p_value': float(p_value),
+                        'significant': p_value < 0.05,
+                        'lowest_mean_lr': float(lowest_data.mean()),
+                        'highest_mean_lr': float(highest_data.mean())
+                    }
+    
+    # Test 2: Loss ratio by Vehicle Type
+    if 'VehicleType' in df.columns and 'loss_ratio' in df.columns:
+        vehicle_groups = df.groupby('VehicleType')['loss_ratio'].agg(['mean', 'std', 'count'])
+        vehicle_groups = vehicle_groups.sort_values('mean')
         
-        if len(smoker_charges) > 0 and len(non_smoker_charges) > 0:
-            t_stat, p_value = stats.ttest_ind(smoker_charges, non_smoker_charges)
-            results['smoker_vs_non_smoker'] = {
+        if len(vehicle_groups) >= 2:
+            lowest_vehicle = vehicle_groups.index[0]
+            highest_vehicle = vehicle_groups.index[-1]
+            
+            lowest_data = df[df['VehicleType'] == lowest_vehicle]['loss_ratio'].dropna()
+            highest_data = df[df['VehicleType'] == highest_vehicle]['loss_ratio'].dropna()
+            
+            if len(lowest_data) > 0 and len(highest_data) > 0:
+                t_stat, p_value = stats.ttest_ind(lowest_data, highest_data)
+                results['vehicle_type_loss_ratio_comparison'] = {
+                    'lowest_vehicle': lowest_vehicle,
+                    'highest_vehicle': highest_vehicle,
+                    't_statistic': float(t_stat),
+                    'p_value': float(p_value),
+                    'significant': p_value < 0.05,
+                    'lowest_mean_lr': float(lowest_data.mean()),
+                    'highest_mean_lr': float(highest_data.mean())
+                }
+    
+    # Test 3: Vehicle Age impact on claims
+    if 'VehicleAge' in df.columns and 'TotalClaims' in df.columns:
+        # Split into old vs new vehicles
+        median_age = df['VehicleAge'].median()
+        old_vehicles = df[df['VehicleAge'] > median_age]['TotalClaims']
+        new_vehicles = df[df['VehicleAge'] <= median_age]['TotalClaims']
+        
+        if len(old_vehicles) > 0 and len(new_vehicles) > 0:
+            t_stat, p_value = stats.ttest_ind(old_vehicles, new_vehicles)
+            results['vehicle_age_impact'] = {
+                'median_age': float(median_age),
                 't_statistic': float(t_stat),
                 'p_value': float(p_value),
                 'significant': p_value < 0.05,
-                'smoker_mean': float(smoker_charges.mean()),
-                'non_smoker_mean': float(non_smoker_charges.mean())
+                'old_vehicles_mean': float(old_vehicles.mean()),
+                'new_vehicles_mean': float(new_vehicles.mean())
             }
     
     return results
+
+
+def identify_low_risk_groups(df: pd.DataFrame) -> pd.DataFrame:
+    """Identify low-risk groups with loss ratio analysis."""
+    if df.empty or 'loss_ratio' not in df.columns:
+        return pd.DataFrame()
+    
+    low_risk_groups = []
+    
+    # Group by Province
+    if 'Province' in df.columns:
+        prov = df.groupby('Province').agg({
+            'TotalClaims': 'sum' if 'TotalClaims' in df.columns else 'count',
+            'TotalPremium': 'sum' if 'TotalPremium' in df.columns else 'count',
+            'PolicyID': 'nunique' if 'PolicyID' in df.columns else 'count'
+        })
+        if 'TotalPremium' in prov.columns and 'TotalClaims' in prov.columns:
+            prov['loss_ratio'] = prov['TotalClaims'] / prov['TotalPremium'].replace(0, np.nan)
+            prov['sample_size'] = prov['PolicyID'] if 'PolicyID' in prov.columns else prov.index.map(lambda x: len(df[df['Province'] == x]))
+            
+            for province in prov.index:
+                if not pd.isna(prov.loc[province, 'loss_ratio']):
+                    low_risk_groups.append({
+                        'Group': f"Province: {province}",
+                        'LossRatio': prov.loc[province, 'loss_ratio'],
+                        'SampleSize': int(prov.loc[province, 'sample_size']),
+                        'TotalClaims': float(prov.loc[province, 'TotalClaims']),
+                        'TotalPremium': float(prov.loc[province, 'TotalPremium'])
+                    })
+    
+    # Group by Province + VehicleType
+    if 'Province' in df.columns and 'VehicleType' in df.columns:
+        combo = df.groupby(['Province', 'VehicleType']).agg({
+            'TotalClaims': 'sum' if 'TotalClaims' in df.columns else 'count',
+            'TotalPremium': 'sum' if 'TotalPremium' in df.columns else 'count',
+            'PolicyID': 'nunique' if 'PolicyID' in df.columns else 'count'
+        })
+        if 'TotalPremium' in combo.columns and 'TotalClaims' in combo.columns:
+            combo['loss_ratio'] = combo['TotalClaims'] / combo['TotalPremium'].replace(0, np.nan)
+            combo['sample_size'] = combo['PolicyID'] if 'PolicyID' in combo.columns else combo.index.map(lambda x: len(df[(df['Province'] == x[0]) & (df['VehicleType'] == x[1])]))
+            
+            for (province, vehicle_type) in combo.index:
+                if not pd.isna(combo.loc[(province, vehicle_type), 'loss_ratio']):
+                    low_risk_groups.append({
+                        'Group': f"Province: {province}, VehicleType: {vehicle_type}",
+                        'LossRatio': combo.loc[(province, vehicle_type), 'loss_ratio'],
+                        'SampleSize': int(combo.loc[(province, vehicle_type), 'sample_size']),
+                        'TotalClaims': float(combo.loc[(province, vehicle_type), 'TotalClaims']),
+                        'TotalPremium': float(combo.loc[(province, vehicle_type), 'TotalPremium'])
+                    })
+    
+    low_risk_df = pd.DataFrame(low_risk_groups)
+    if not low_risk_df.empty:
+        low_risk_df = low_risk_df.sort_values('LossRatio').head(20)  # Top 20 low-risk groups
+    
+    return low_risk_df
 
 
 def generate_report(df: pd.DataFrame, stats: dict, hypothesis_results: dict, 
@@ -210,10 +377,22 @@ def main():
     hypothesis_results = perform_hypothesis_tests(df)
     print(f"Performed {len(hypothesis_results)} hypothesis tests")
     
+    # Identify low-risk groups
+    low_risk_groups = identify_low_risk_groups(df)
+    if not low_risk_groups.empty:
+        print(f"Identified {len(low_risk_groups)} low-risk groups")
+        low_risk_path = INTERIM_REPORTS_DIR / "low_risk_groups.csv"
+        low_risk_groups.to_csv(low_risk_path, index=False)
+        print(f"Low-risk groups saved to {low_risk_path}")
+    
     # Save features for modeling
     features_path = PROCESSED_DATA_DIR / "eda_features.pkl"
     with open(features_path, 'wb') as f:
-        pickle.dump({'stats': stats, 'hypothesis_results': hypothesis_results}, f)
+        pickle.dump({
+            'stats': stats, 
+            'hypothesis_results': hypothesis_results,
+            'low_risk_groups': low_risk_groups.to_dict('records') if not low_risk_groups.empty else []
+        }, f)
     print(f"Features saved to {features_path}")
     
     # Generate report

@@ -27,13 +27,18 @@ def create_sample_structure() -> pd.DataFrame:
     """Create sample data structure for testing."""
     print("Creating sample data structure...")
     return pd.DataFrame({
-        'age': [],
-        'sex': [],
-        'bmi': [],
-        'children': [],
-        'smoker': [],
-        'region': [],
-        'charges': []
+        'TransactionMonth': [],
+        'TotalClaims': [],
+        'TotalPremium': [],
+        'Province': [],
+        'PostalCode': [],
+        'VehicleType': [],
+        'RegistrationYear': [],
+        'CustomValueEstimate': [],
+        'VehicleIntroDate': [],
+        'Gender': [],
+        'Make': [],
+        'PolicyID': []
     })
 
 
@@ -70,11 +75,61 @@ def clean_data(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def prepare_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Prepare features for modeling."""
+    """Prepare features for modeling with feature engineering."""
     df = df.copy()
     
-    # Encode categorical variables if needed
-    # This is a placeholder - actual encoding will depend on the data
+    # Parse date
+    if 'TransactionMonth' in df.columns:
+        df['TransactionMonth'] = pd.to_datetime(df['TransactionMonth'])
+        df['TransactionYear'] = df['TransactionMonth'].dt.year
+        df['TransactionMonthNum'] = df['TransactionMonth'].dt.month
+    
+    # Calculate loss ratio
+    if 'TotalClaims' in df.columns and 'TotalPremium' in df.columns:
+        df['loss_ratio'] = df['TotalClaims'] / df['TotalPremium'].replace(0, np.nan)
+    
+    # Feature engineering: Age of vehicle
+    if 'RegistrationYear' in df.columns and 'TransactionMonth' in df.columns:
+        current_year = df['TransactionMonth'].dt.year if 'TransactionMonth' in df.columns else pd.Timestamp.now().year
+        if isinstance(current_year, pd.Series):
+            df['VehicleAge'] = current_year - df['RegistrationYear']
+        else:
+            df['VehicleAge'] = current_year - df['RegistrationYear']
+    
+    # Feature engineering: Vehicle value bins
+    if 'CustomValueEstimate' in df.columns:
+        df['VehicleValueBin'] = pd.cut(
+            df['CustomValueEstimate'],
+            bins=[0, 10000, 25000, 50000, 100000, np.inf],
+            labels=['Low', 'Medium-Low', 'Medium', 'Medium-High', 'High']
+        )
+    
+    # Feature engineering: Time since vehicle introduced
+    if 'VehicleIntroDate' in df.columns and 'TransactionMonth' in df.columns:
+        if pd.api.types.is_datetime64_any_dtype(df['VehicleIntroDate']):
+            df['TimeSinceIntro'] = (df['TransactionMonth'] - df['VehicleIntroDate']).dt.days / 365.25
+        else:
+            df['VehicleIntroDate'] = pd.to_datetime(df['VehicleIntroDate'], errors='coerce')
+            df['TimeSinceIntro'] = (df['TransactionMonth'] - df['VehicleIntroDate']).dt.days / 365.25
+    
+    # Feature engineering: Interaction features
+    if 'Gender' in df.columns and 'VehicleType' in df.columns:
+        df['Gender_VehicleType'] = df['Gender'].astype(str) + '_' + df['VehicleType'].astype(str)
+    
+    if 'Make' in df.columns and 'RegistrationYear' in df.columns:
+        # Create registration year buckets
+        df['RegistrationYearBucket'] = pd.cut(
+            df['RegistrationYear'],
+            bins=[0, 2010, 2015, 2020, np.inf],
+            labels=['Old', 'Medium-Old', 'Recent', 'New']
+        )
+        df['Make_YearBucket'] = df['Make'].astype(str) + '_' + df['RegistrationYearBucket'].astype(str)
+    
+    # Feature engineering: Historical aggregates (if PolicyID exists)
+    if 'PolicyID' in df.columns and 'TotalClaims' in df.columns:
+        # Historical claims per policy
+        policy_claims = df.groupby('PolicyID')['TotalClaims'].transform('sum')
+        df['HistoricalClaimsPerPolicy'] = policy_claims
     
     return df
 

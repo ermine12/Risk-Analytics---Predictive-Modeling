@@ -28,23 +28,27 @@ def load_data() -> pd.DataFrame:
 
 
 def calculate_optimal_premium(df: pd.DataFrame) -> pd.Series:
-    """Calculate optimal premium based on risk factors."""
+    """Calculate optimal premium based on risk factors and loss ratio."""
     # Premium should cover expected claims plus margin
-    # This is a simplified calculation - in practice, this would be more sophisticated
-    if 'charges' in df.columns:
-        # Premium = charges * (1 + risk_margin)
-        # Risk margin varies by risk factors
-        base_premium = df['charges'].copy()
+    # Target loss ratio of 0.7 (70%) means we want premium to be claims / 0.7
+    target_loss_ratio = 0.7
+    
+    if 'TotalClaims' in df.columns:
+        # Base premium calculation: claims / target_loss_ratio
+        optimal_premium = df['TotalClaims'] / target_loss_ratio
         
-        # Adjust for risk factors
-        if 'smoker' in df.columns:
-            smoker_multiplier = 1.5 if 'yes' in df['smoker'].values else 1.0
-            base_premium = base_premium * smoker_multiplier
+        # If we have historical premium, use it as a reference
+        if 'TotalPremium' in df.columns:
+            # Blend: 70% based on claims, 30% based on current premium
+            optimal_premium = 0.7 * optimal_premium + 0.3 * df['TotalPremium']
         
-        # Add base margin
-        optimal_premium = base_premium * 1.2  # 20% margin
+        # Ensure minimum premium
+        optimal_premium = optimal_premium.clip(lower=df['TotalClaims'] * 1.1)  # At least 10% above claims
         
         return optimal_premium
+    elif 'TotalPremium' in df.columns:
+        # Fallback: use current premium as base
+        return df['TotalPremium'] * 1.1  # 10% increase
     else:
         return pd.Series()
 
@@ -62,7 +66,8 @@ def prepare_features(df: pd.DataFrame) -> tuple:
         return None, None, None, None
     
     # Select features (exclude target-related columns)
-    feature_cols = [col for col in df.columns if col not in ['charges', 'premium']]
+    exclude_cols = ['TotalPremium', 'TotalClaims', 'loss_ratio', 'PolicyID', 'premium']
+    feature_cols = [col for col in df.columns if col not in exclude_cols]
     
     # Encode categorical variables
     df_encoded = df.copy()
@@ -73,7 +78,7 @@ def prepare_features(df: pd.DataFrame) -> tuple:
             df_encoded = pd.get_dummies(df_encoded, columns=[col], prefix=col, drop_first=True)
     
     # Update feature columns after encoding
-    feature_cols = [col for col in df_encoded.columns if col not in ['charges', 'premium']]
+    feature_cols = [col for col in df_encoded.columns if col not in exclude_cols]
     
     X = df_encoded[feature_cols]
     y = optimal_premium

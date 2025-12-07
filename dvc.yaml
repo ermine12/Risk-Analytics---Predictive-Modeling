@@ -53,3 +53,12 @@ stages:
       - reports/final/evaluation_report.html
       - reports/final/model_comparison.json
 
+  recommendations:
+    cmd: python src/models/low_risk_recommendations.py
+    deps:
+      - reports/interim/low_risk_groups.csv
+      - src/models/low_risk_recommendations.py
+    outs:
+      - reports/final/low_risk_recommendations.csv
+      - reports/final/recommendations_summary.json
+
