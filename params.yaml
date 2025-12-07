@@ -1,0 +1,18 @@
+data:
+  preprocessing:
+    handle_missing: "drop"
+    outlier_threshold: 3.0
+
+models:
+  claims:
+    model_type: "random_forest"
+    n_estimators: 100
+    max_depth: 10
+    random_state: 42
+
+  premium:
+    model_type: "gradient_boosting"
+    n_estimators: 100
+    learning_rate: 0.1
+    random_state: 42
+

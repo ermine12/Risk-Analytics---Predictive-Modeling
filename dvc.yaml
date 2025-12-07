@@ -1,0 +1,55 @@
+stages:
+  prepare_data:
+    cmd: python src/data/prepare_data.py
+    deps:
+      - data/raw/insurance.csv
+      - src/data/prepare_data.py
+    outs:
+      - data/processed/insurance_cleaned.csv
+    params:
+      - data.preprocessing
+
+  eda:
+    cmd: python src/eda/run_eda.py
+    deps:
+      - data/processed/insurance_cleaned.csv
+      - src/eda/run_eda.py
+    outs:
+      - reports/interim/eda_report.html
+      - data/processed/eda_features.pkl
+
+  train_claims_model:
+    cmd: python src/models/train_claims_model.py
+    deps:
+      - data/processed/insurance_cleaned.csv
+      - data/processed/eda_features.pkl
+      - src/models/train_claims_model.py
+    outs:
+      - models/claims_model.pkl
+      - reports/interim/claims_model_metrics.json
+    params:
+      - models.claims
+
+  train_premium_model:
+    cmd: python src/models/train_premium_model.py
+    deps:
+      - data/processed/insurance_cleaned.csv
+      - data/processed/eda_features.pkl
+      - src/models/train_premium_model.py
+    outs:
+      - models/premium_model.pkl
+      - reports/interim/premium_model_metrics.json
+    params:
+      - models.premium
+
+  evaluate:
+    cmd: python src/models/evaluate_models.py
+    deps:
+      - models/claims_model.pkl
+      - models/premium_model.pkl
+      - data/processed/insurance_cleaned.csv
+      - src/models/evaluate_models.py
+    outs:
+      - reports/final/evaluation_report.html
+      - reports/final/model_comparison.json
+

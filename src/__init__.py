@@ -1,0 +1,2 @@
+"""Insurance Risk Analytics package."""
+
