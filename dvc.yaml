@@ -62,3 +62,23 @@ stages:
       - reports/final/low_risk_recommendations.csv
       - reports/final/recommendations_summary.json
 
+  hypothesis_testing:
+    cmd: python src/eda/hypothesis_testing.py
+    deps:
+      - data/processed/insurance_cleaned.csv
+      - src/eda/hypothesis_testing.py
+    outs:
+      - reports/interim/hypothesis_test_results.json
+
+  advanced_modeling:
+    cmd: python src/models/advanced_modeling.py
+    deps:
+      - data/processed/insurance_cleaned.csv
+      - src/models/advanced_modeling.py
+    outs:
+      - models/claim_severity_model.pkl
+      - models/premium_model.pkl
+      - models/claim_probability_model.pkl
+      - reports/final/model_evaluation_results.json
+      - reports/final/claim_severity_shap_importance.csv
+
