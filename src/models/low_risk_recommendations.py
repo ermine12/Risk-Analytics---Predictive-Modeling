@@ -10,21 +10,45 @@ import json
 sys.path.append(str(Path(__file__).parent.parent))
 
 from utils.config import INTERIM_REPORTS_DIR, FINAL_REPORTS_DIR
+from utils.logger import logger
 
 
 def load_low_risk_groups() -> pd.DataFrame:
-    """Load identified low-risk groups from EDA."""
+    """
+    Load identified low-risk groups from EDA analysis.
+    
+    Returns:
+        DataFrame with low-risk groups. Empty DataFrame if file not found.
+        
+    Assumptions:
+        - Low-risk groups CSV file exists at expected location
+        - File contains columns: Group, LossRatio, SampleSize, etc.
+    """
     low_risk_path = INTERIM_REPORTS_DIR / "low_risk_groups.csv"
     
     if not low_risk_path.exists():
-        print(f"Warning: {low_risk_path} not found")
+        logger.warning(f"{low_risk_path} not found")
         return pd.DataFrame()
     
     return pd.read_csv(low_risk_path)
 
 
 def calculate_confidence_interval(loss_ratio: float, sample_size: int, confidence: float = 0.95) -> tuple:
-    """Calculate confidence interval for loss ratio using normal approximation."""
+    """
+    Calculate confidence interval for loss ratio using normal approximation.
+    
+    Args:
+        loss_ratio: Observed loss ratio (proportion).
+        sample_size: Number of observations.
+        confidence: Confidence level (default 0.95 for 95% CI).
+        
+    Returns:
+        Tuple of (lower_bound, upper_bound) for confidence interval.
+        
+    Assumptions:
+        - Normal approximation is valid (large sample size)
+        - Loss ratio is between 0 and 1
+    """
     if sample_size == 0:
         return (loss_ratio, loss_ratio)
     
@@ -47,7 +71,32 @@ def simulate_premium_adjustment(
     target_loss_ratio: float = 0.7,
     conversion_increase_pct: float = None
 ) -> dict:
-    """Simulate financial impact of premium adjustment."""
+    """
+    Simulate financial impact of premium adjustment.
+    
+    Projects changes in premium volume, profit, and loss ratio based on
+    premium reduction and expected conversion increase.
+    
+    Args:
+        current_premium: Current premium amount.
+        current_loss_ratio: Current loss ratio (claims/premium).
+        premium_reduction_pct: Percentage reduction in premium (e.g., 10 for 10%).
+        target_loss_ratio: Target loss ratio after adjustment (default 0.7).
+        conversion_increase_pct: Expected conversion increase percentage.
+                              If None, uses elasticity assumption (0.5% per 1% reduction).
+        
+    Returns:
+        Dictionary with projected metrics:
+        - new_premium: Adjusted premium amount
+        - projected_policies: Relative policy count change
+        - projected_premium_volume: Total premium volume projection
+        - projected_profit_change: Change in profit
+        - projected_loss_ratio: Expected loss ratio after adjustment
+        
+    Assumptions:
+        - Conversion elasticity: 0.5% increase per 1% premium reduction
+        - Claims remain constant (short-term assumption)
+    """
     
     # Default conversion increase based on premium reduction (elasticity assumption)
     if conversion_increase_pct is None:
@@ -94,7 +143,30 @@ def simulate_premium_adjustment(
 
 
 def generate_recommendations(low_risk_groups: pd.DataFrame, target_loss_ratio: float = 0.7) -> pd.DataFrame:
-    """Generate recommendations for low-risk groups."""
+    """
+    Generate premium adjustment recommendations for low-risk groups.
+    
+    Analyzes each low-risk group and recommends premium reductions that
+    maintain target loss ratio while maximizing profit through increased conversion.
+    
+    Args:
+        low_risk_groups: DataFrame with columns: Group, LossRatio, SampleSize,
+                        TotalPremium, TotalClaims.
+        target_loss_ratio: Target loss ratio threshold (default 0.7).
+        
+    Returns:
+        DataFrame with recommendations including:
+        - Group: Group identifier
+        - RecommendedPremiumReduction: Suggested premium reduction percentage
+        - ProjectedProfitChange: Expected profit change
+        - ConfidenceInterval: Loss ratio confidence interval
+        - MeetsTarget: Whether recommendation meets target loss ratio
+        
+    Assumptions:
+        - Groups have sufficient sample size for statistical validity
+        - Premium elasticity assumptions hold (0.5% conversion per 1% reduction)
+        - Claims frequency remains constant
+    """
     recommendations = []
     
     for idx, row in low_risk_groups.iterrows():
@@ -153,28 +225,28 @@ def generate_recommendations(low_risk_groups: pd.DataFrame, target_loss_ratio: f
 
 def main():
     """Main recommendation pipeline."""
-    print("Generating low-risk group recommendations...")
+    logger.info("Generating low-risk group recommendations...")
     
     # Load low-risk groups
     low_risk_groups = load_low_risk_groups()
     
     if low_risk_groups.empty:
-        print("No low-risk groups found. Run EDA first.")
+        logger.warning("No low-risk groups found. Run EDA first.")
         return
     
-    print(f"Found {len(low_risk_groups)} low-risk groups")
+    logger.info(f"Found {len(low_risk_groups)} low-risk groups")
     
     # Generate recommendations
     recommendations = generate_recommendations(low_risk_groups, target_loss_ratio=0.7)
     
     if recommendations.empty:
-        print("No recommendations generated")
+        logger.warning("No recommendations generated")
         return
     
     # Save recommendations
     recommendations_path = FINAL_REPORTS_DIR / "low_risk_recommendations.csv"
     recommendations.to_csv(recommendations_path, index=False)
-    print(f"Recommendations saved to {recommendations_path}")
+    logger.info(f"Recommendations saved to {recommendations_path}")
     
     # Generate summary report
     summary = {
@@ -192,16 +264,16 @@ def main():
     with open(summary_path, 'w') as f:
         json.dump(summary, f, indent=2)
     
-    print(f"\nRecommendations Summary:")
-    print(f"  Total groups analyzed: {summary['total_groups_analyzed']}")
-    print(f"  Recommendations generated: {summary['recommendations_generated']}")
-    print(f"  Groups meeting target: {summary['groups_meeting_target']}")
-    print(f"  Total projected profit change: ${summary['total_projected_profit_change']:,.2f}")
-    print(f"\nTop 5 Recommendations:")
+    logger.info("Recommendations Summary:")
+    logger.info(f"  Total groups analyzed: {summary['total_groups_analyzed']}")
+    logger.info(f"  Recommendations generated: {summary['recommendations_generated']}")
+    logger.info(f"  Groups meeting target: {summary['groups_meeting_target']}")
+    logger.info(f"  Total projected profit change: ${summary['total_projected_profit_change']:,.2f}")
+    logger.info("Top 5 Recommendations:")
     for i, rec in enumerate(summary['top_5_recommendations'], 1):
-        print(f"  {i}. {rec['Group']}")
-        print(f"     Premium reduction: {rec['RecommendedPremiumReduction']}%")
-        print(f"     Projected profit change: ${rec['ProjectedProfitChange']:,.2f}")
+        logger.info(f"  {i}. {rec['Group']}")
+        logger.info(f"     Premium reduction: {rec['RecommendedPremiumReduction']}%")
+        logger.info(f"     Projected profit change: ${rec['ProjectedProfitChange']:,.2f}")
 
 
 if __name__ == "__main__":

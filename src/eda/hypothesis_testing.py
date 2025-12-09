@@ -19,7 +19,22 @@ from utils.logger import logger
 
 
 def normalize_column_names(df: pd.DataFrame) -> pd.DataFrame:
-    """Normalize column names to handle different data formats."""
+    """
+    Normalize column names to standardize data format.
+    
+    Maps common variations: region→Province, charges→TotalClaims, sex→Gender.
+    Estimates TotalPremium if missing.
+    
+    Args:
+        df: Input DataFrame with potentially non-standard column names.
+        
+    Returns:
+        DataFrame with normalized column names and estimated TotalPremium.
+        
+    Assumptions:
+        - Standard dataset uses 'charges' for claims
+        - Premium can be estimated as claims * 1.2
+    """
     df = df.copy()
     column_mapping = {
         'region': 'Province',
@@ -55,7 +70,21 @@ def calculate_claim_frequency(df: pd.DataFrame) -> pd.Series:
 
 
 def calculate_claim_severity(df: pd.DataFrame) -> pd.Series:
-    """Calculate claim severity: average amount of a claim, given a claim occurred."""
+    """
+    Calculate claim severity: claim amounts for policies with claims.
+    
+    Filters to policies with claims above median threshold.
+    
+    Args:
+        df: DataFrame with TotalClaims column.
+        
+    Returns:
+        Series of claim amounts for policies with claims (above median).
+        
+    Assumptions:
+        - TotalClaims column exists
+        - Median threshold defines "claims" subset
+    """
     if 'TotalClaims' in df.columns:
         # For standard dataset, use median threshold
         threshold = df['TotalClaims'].median()
@@ -64,7 +93,19 @@ def calculate_claim_severity(df: pd.DataFrame) -> pd.Series:
 
 
 def calculate_margin(df: pd.DataFrame) -> pd.Series:
-    """Calculate margin: TotalPremium - TotalClaims."""
+    """
+    Calculate profit margin: TotalPremium - TotalClaims.
+    
+    Args:
+        df: DataFrame with TotalPremium and TotalClaims columns.
+        
+    Returns:
+        Series of margin values (premium minus claims).
+        
+    Assumptions:
+        - Both TotalPremium and TotalClaims columns exist
+        - Values are numeric and in same currency units
+    """
     if 'TotalPremium' in df.columns and 'TotalClaims' in df.columns:
         return df['TotalPremium'] - df['TotalClaims']
     return pd.Series()
@@ -352,7 +393,25 @@ def test_gender_risk_differences(df: pd.DataFrame) -> dict:
 
 
 def run_all_hypothesis_tests(df: pd.DataFrame) -> dict:
-    """Run all hypothesis tests and generate report."""
+    """
+    Run all hypothesis tests and generate comprehensive report.
+    
+    Tests hypotheses for:
+    - Province/region risk differences
+    - Zipcode risk differences
+    - Zipcode margin differences
+    - Gender risk differences
+    
+    Args:
+        df: DataFrame with insurance data.
+        
+    Returns:
+        Dictionary containing results for all hypothesis tests.
+        
+    Assumptions:
+        - Data has been normalized (column names standardized)
+        - Required columns exist (handles missing columns gracefully)
+    """
     logger.info("=" * 60)
     logger.info("Starting A/B Hypothesis Testing")
     logger.info("=" * 60)
@@ -379,7 +438,22 @@ def run_all_hypothesis_tests(df: pd.DataFrame) -> dict:
 
 
 def generate_business_recommendations(results: dict) -> str:
-    """Generate business recommendations based on hypothesis test results."""
+    """
+    Generate business recommendations from hypothesis test results.
+    
+    Creates actionable recommendations for rejected null hypotheses,
+    including specific premium adjustment suggestions.
+    
+    Args:
+        results: Dictionary of hypothesis test results with p-values and statistics.
+        
+    Returns:
+        String containing formatted business recommendations.
+        
+    Assumptions:
+        - Results dictionary contains test outcomes with 'reject_null' flags
+        - P-values are available for interpretation
+    """
     recommendations = []
     
     # Province recommendations
@@ -440,10 +514,10 @@ if __name__ == "__main__":
         logger.info(f"Loaded data: {df.shape}")
         results = run_all_hypothesis_tests(df)
         recommendations = generate_business_recommendations(results)
-        print("\n" + "=" * 60)
-        print("BUSINESS RECOMMENDATIONS")
-        print("=" * 60)
-        print(recommendations)
+        logger.info("\n" + "=" * 60)
+        logger.info("BUSINESS RECOMMENDATIONS")
+        logger.info("=" * 60)
+        logger.info(recommendations)
         
         # Generate detailed report
         report_path = INTERIM_REPORTS_DIR / "hypothesis_test_report.txt"

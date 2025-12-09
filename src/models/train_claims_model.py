@@ -14,28 +14,57 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 sys.path.append(str(Path(__file__).parent.parent))
 
 from utils.config import PROCESSED_DATA_DIR, MODELS_DIR, INTERIM_REPORTS_DIR, RANDOM_SEED
+from utils.logger import logger
 
 
 def load_data() -> pd.DataFrame:
-    """Load processed insurance data."""
+    """
+    Load processed insurance data for claims model training.
+    
+    Returns:
+        DataFrame with cleaned insurance data. Empty DataFrame if file not found.
+        
+    Assumptions:
+        - Processed data file exists at expected location
+    """
     filepath = PROCESSED_DATA_DIR / "insurance_cleaned.csv"
     
     if not filepath.exists():
-        print(f"Warning: {filepath} not found.")
+        logger.warning(f"{filepath} not found.")
         return pd.DataFrame()
     
+    logger.info(f"Loading data from {filepath}")
     return pd.read_csv(filepath)
 
 
 def prepare_features(df: pd.DataFrame) -> tuple:
-    """Prepare features and target for claims prediction."""
+    """
+    Prepare features and target for claims prediction model.
+    
+    Encodes categorical variables using one-hot encoding and selects
+    feature columns excluding target and premium-related columns.
+    
+    Args:
+        df: DataFrame with insurance data including TotalClaims column.
+        
+    Returns:
+        Tuple of (X, y, feature_cols, df_encoded):
+        - X: Feature matrix
+        - y: Target vector (TotalClaims)
+        - feature_cols: List of feature column names
+        - df_encoded: DataFrame with encoded categorical variables
+        
+    Assumptions:
+        - TotalClaims column exists in df
+        - Categorical variables can be one-hot encoded
+    """
     if df.empty:
         return None, None, None, None
     
     # Use 'TotalClaims' as the target
     target_col = 'TotalClaims'
     if target_col not in df.columns:
-        print(f"Warning: '{target_col}' column not found")
+        logger.warning(f"'{target_col}' column not found")
         return None, None, None, None
     
     # Select features (exclude target and premium-related columns)
@@ -60,7 +89,20 @@ def prepare_features(df: pd.DataFrame) -> tuple:
 
 
 def train_model(X: pd.DataFrame, y: pd.Series) -> RandomForestRegressor:
-    """Train Random Forest model for claims prediction."""
+    """
+    Train Random Forest regressor for claims prediction.
+    
+    Args:
+        X: Feature matrix (training data).
+        y: Target vector (TotalClaims).
+        
+    Returns:
+        Trained RandomForestRegressor model.
+        
+    Assumptions:
+        - X and y have matching indices
+        - No missing values in X or y
+    """
     model = RandomForestRegressor(
         n_estimators=200,  # As per requirements
         max_depth=10,
@@ -73,7 +115,23 @@ def train_model(X: pd.DataFrame, y: pd.Series) -> RandomForestRegressor:
 
 
 def evaluate_model(model, X_test: pd.DataFrame, y_test: pd.Series) -> dict:
-    """Evaluate model performance."""
+    """
+    Evaluate model performance using regression metrics.
+    
+    Calculates RMSE, MAE, R², and Mean Absolute Percentage Error.
+    
+    Args:
+        model: Trained model with predict() method.
+        X_test: Test feature matrix.
+        y_test: Test target vector.
+        
+    Returns:
+        Dictionary of metric_name -> metric_value.
+        
+    Assumptions:
+        - Model has been trained
+        - X_test and y_test have matching indices
+    """
     y_pred = model.predict(X_test)
     
     metrics = {
@@ -88,13 +146,13 @@ def evaluate_model(model, X_test: pd.DataFrame, y_test: pd.Series) -> dict:
 
 def main():
     """Main training pipeline."""
-    print("Training claims prediction model...")
+    logger.info("Training claims prediction model...")
     
     # Load data
     df = load_data()
     
     if df.empty:
-        print("No data available for training")
+        logger.warning("No data available for training")
         # Create empty metrics file
         metrics = {'error': 'No data available'}
         output_path = INTERIM_REPORTS_DIR / "claims_model_metrics.json"
@@ -106,11 +164,11 @@ def main():
     X, y, feature_cols, df_encoded = prepare_features(df)
     
     if X is None or y is None:
-        print("Failed to prepare features")
+        logger.error("Failed to prepare features")
         return
     
-    print(f"Features: {len(feature_cols)}")
-    print(f"Samples: {len(X)}")
+    logger.info(f"Features: {len(feature_cols)}")
+    logger.info(f"Samples: {len(X)}")
     
     # Split data
     X_train, X_test, y_train, y_test = train_test_split(
@@ -119,18 +177,18 @@ def main():
     
     # Train model
     model = train_model(X_train, y_train)
-    print("Model trained")
+    logger.info("Model trained")
     
     # Evaluate model
     metrics = evaluate_model(model, X_test, y_test)
-    print(f"Model Metrics:")
+    logger.info("Model Metrics:")
     for key, value in metrics.items():
-        print(f"  {key.upper()}: {value:.4f}")
+        logger.info(f"  {key.upper()}: {value:.4f}")
     
     # Save model
     model_path = MODELS_DIR / "claims_model.pkl"
     joblib.dump(model, model_path)
-    print(f"Model saved to {model_path}")
+    logger.info(f"Model saved to {model_path}")
     
     # Save feature names
     feature_path = MODELS_DIR / "claims_model_features.pkl"
@@ -145,7 +203,7 @@ def main():
     # Calculate and save SHAP feature importance
     try:
         import shap
-        print("Calculating SHAP feature importance...")
+        logger.info("Calculating SHAP feature importance...")
         
         # Use a sample for SHAP (faster)
         sample_size = min(100, len(X_test))
@@ -165,14 +223,14 @@ def main():
         
         shap_path = INTERIM_REPORTS_DIR / "claims_model_shap_importance.csv"
         feature_importance.to_csv(shap_path, index=False)
-        print(f"SHAP feature importance saved to {shap_path}")
-        print("\nTop 10 Most Important Features (SHAP):")
-        print(feature_importance.head(10).to_string(index=False))
+        logger.info(f"SHAP feature importance saved to {shap_path}")
+        logger.info("Top 10 Most Important Features (SHAP):")
+        logger.info(f"\n{feature_importance.head(10).to_string(index=False)}")
         
     except ImportError:
-        print("SHAP not available, skipping feature importance analysis")
+        logger.warning("SHAP not available, skipping feature importance analysis")
     except Exception as e:
-        print(f"Error calculating SHAP: {e}")
+        logger.error(f"Error calculating SHAP: {e}")
 
 
 if __name__ == "__main__":

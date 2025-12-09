@@ -12,21 +12,46 @@ import pickle
 sys.path.append(str(Path(__file__).parent.parent))
 
 from utils.config import PROCESSED_DATA_DIR, INTERIM_REPORTS_DIR, PLOT_STYLE, FIGURE_SIZE
+from utils.logger import logger
 
 
 def load_processed_data() -> pd.DataFrame:
-    """Load processed insurance data."""
+    """
+    Load processed/cleaned insurance data.
+    
+    Returns:
+        DataFrame with cleaned insurance data. Empty DataFrame if file not found.
+        
+    Assumptions:
+        - Processed data file exists at expected location
+        - File is valid CSV format
+    """
     filepath = PROCESSED_DATA_DIR / "insurance_cleaned.csv"
     
     if not filepath.exists():
-        print(f"Warning: {filepath} not found.")
+        logger.warning(f"{filepath} not found.")
         return pd.DataFrame()
     
+    logger.info(f"Loading processed data from {filepath}")
     return pd.read_csv(filepath)
 
 
 def generate_summary_statistics(df: pd.DataFrame) -> dict:
-    """Generate summary statistics."""
+    """
+    Generate comprehensive summary statistics for the dataset.
+    
+    Args:
+        df: Input DataFrame with insurance data.
+        
+    Returns:
+        Dictionary containing:
+        - 'shape': Tuple of (rows, columns)
+        - 'columns': List of column names
+        - 'dtypes': Dictionary of column -> data type
+        - 'missing_values': Dictionary of column -> missing count
+        - 'numerical_summary': Dictionary of numerical column statistics
+        - 'categorical_summary': Dictionary of categorical value counts
+    """
     stats = {
         'shape': df.shape,
         'columns': list(df.columns),
@@ -45,9 +70,25 @@ def generate_summary_statistics(df: pd.DataFrame) -> dict:
 
 
 def create_visualizations(df: pd.DataFrame, output_dir: Path):
-    """Create EDA visualizations - 3 creative plots + bar charts + box plots."""
+    """
+    Create comprehensive EDA visualizations.
+    
+    Generates:
+    - Bar charts for top 5 categorical variables
+    - Box plots for TotalPremium and TotalClaims (outlier detection)
+    - Box plots by Province for claims
+    - 3 creative plots: Loss ratio by province, claims distribution, heatmaps
+    
+    Args:
+        df: DataFrame with insurance data.
+        output_dir: Path object for saving visualization files.
+        
+    Assumptions:
+        - Output directory exists and is writable
+        - Required columns exist in df (handles missing columns gracefully)
+    """
     if df.empty:
-        print("No data available for visualization")
+        logger.warning("No data available for visualization")
         return
     
     plt.style.use('seaborn-v0_8')
@@ -73,9 +114,9 @@ def create_visualizations(df: pd.DataFrame, output_dir: Path):
                     ax.text(i, v, str(v), ha='center', va='bottom', fontweight='bold')
                 
                 plt.tight_layout()
-                plt.savefig(output_dir / f'bar_chart_{col}.png', dpi=300, bbox_inches='tight')
-                plt.close()
-                print(f"Created: Bar chart for {col}")
+        plt.savefig(output_dir / f'bar_chart_{col}.png', dpi=300, bbox_inches='tight')
+        plt.close()
+        logger.info(f"Created: Bar chart for {col}")
     
     # BOX PLOTS for critical numeric features to detect outliers
     critical_numeric = ['TotalPremium', 'TotalClaims']
@@ -109,7 +150,7 @@ def create_visualizations(df: pd.DataFrame, output_dir: Path):
             plt.tight_layout()
             plt.savefig(output_dir / f'boxplot_{col}.png', dpi=300, bbox_inches='tight')
             plt.close()
-            print(f"Created: Box plot for {col} (found {len(outliers)} outliers)")
+            logger.info(f"Created: Box plot for {col} (found {len(outliers)} outliers)")
     
     # Box plots by categorical variable (if available)
     if 'Province' in df.columns and 'TotalClaims' in df.columns:
@@ -130,7 +171,7 @@ def create_visualizations(df: pd.DataFrame, output_dir: Path):
         plt.tight_layout()
         plt.savefig(output_dir / 'boxplot_claims_by_province.png', dpi=300, bbox_inches='tight')
         plt.close()
-        print("Created: Box plot for Total Claims by Province")
+        logger.info("Created: Box plot for Total Claims by Province")
     
     # 1. Loss Ratio by Province (Creative Plot 1)
     if 'Province' in df.columns and 'loss_ratio' in df.columns:
@@ -155,7 +196,7 @@ def create_visualizations(df: pd.DataFrame, output_dir: Path):
             plt.tight_layout()
             plt.savefig(output_dir / 'loss_ratio_by_province.png', dpi=300, bbox_inches='tight')
             plt.close()
-            print("Created: Loss Ratio by Province plot")
+            logger.info("Created: Loss Ratio by Province plot")
     
     # 2. Distribution of Total Claims with Vehicle Age Overlay (Creative Plot 2)
     if 'TotalClaims' in df.columns:
@@ -190,7 +231,7 @@ def create_visualizations(df: pd.DataFrame, output_dir: Path):
         plt.tight_layout()
         plt.savefig(output_dir / 'claims_distribution_analysis.png', dpi=300, bbox_inches='tight')
         plt.close()
-        print("Created: Claims Distribution Analysis plot")
+        logger.info("Created: Claims Distribution Analysis plot")
     
     # 3. Loss Ratio Heatmap by Vehicle Type and Province (Creative Plot 3)
     if 'VehicleType' in df.columns and 'Province' in df.columns and 'loss_ratio' in df.columns:
@@ -214,7 +255,7 @@ def create_visualizations(df: pd.DataFrame, output_dir: Path):
             plt.tight_layout()
             plt.savefig(output_dir / 'loss_ratio_heatmap.png', dpi=300, bbox_inches='tight')
             plt.close()
-            print("Created: Loss Ratio Heatmap plot")
+            logger.info("Created: Loss Ratio Heatmap plot")
     
     # 4. Correlation heatmap (bonus)
     numerical_cols = df.select_dtypes(include=[np.number]).columns
@@ -231,7 +272,22 @@ def create_visualizations(df: pd.DataFrame, output_dir: Path):
 
 
 def perform_hypothesis_tests(df: pd.DataFrame) -> dict:
-    """Perform hypothesis tests to identify low-risk groups."""
+    """
+    Perform statistical hypothesis tests to identify low-risk groups.
+    
+    Tests include loss ratio comparisons by Province and VehicleType,
+    and vehicle age impact analysis.
+    
+    Args:
+        df: DataFrame with insurance data including loss_ratio column.
+        
+    Returns:
+        Dictionary of test_name -> {test_statistic, p_value, significant, ...}
+        
+    Assumptions:
+        - Loss ratio column exists (calculated as TotalClaims/TotalPremium)
+        - Sufficient sample sizes for statistical tests
+    """
     results = {}
     
     if df.empty:
@@ -315,8 +371,25 @@ def perform_hypothesis_tests(df: pd.DataFrame) -> dict:
 
 
 def identify_low_risk_groups(df: pd.DataFrame) -> pd.DataFrame:
-    """Identify low-risk groups with loss ratio analysis."""
+    """
+    Identify low-risk customer groups based on loss ratio analysis.
+    
+    Groups policies by Province and Province+VehicleType combinations,
+    calculates loss ratios, and returns top 20 lowest-risk groups.
+    
+    Args:
+        df: DataFrame with insurance data including loss_ratio column.
+        
+    Returns:
+        DataFrame with columns: Group, LossRatio, SampleSize, TotalClaims, TotalPremium
+        Sorted by LossRatio (ascending - lowest risk first).
+        
+    Assumptions:
+        - Loss ratio column exists
+        - Province and VehicleType columns exist (if grouping by them)
+    """
     if df.empty or 'loss_ratio' not in df.columns:
+        logger.warning("Cannot identify low-risk groups: missing data or loss_ratio column")
         return pd.DataFrame()
     
     low_risk_groups = []
@@ -372,7 +445,22 @@ def identify_low_risk_groups(df: pd.DataFrame) -> pd.DataFrame:
 
 def generate_report(df: pd.DataFrame, stats: dict, hypothesis_results: dict, 
                    output_dir: Path):
-    """Generate HTML EDA report."""
+    """
+    Generate HTML EDA report with statistics and hypothesis test results.
+    
+    Args:
+        df: DataFrame with insurance data.
+        stats: Dictionary of summary statistics.
+        hypothesis_results: Dictionary of hypothesis test results.
+        output_dir: Path object for saving report file.
+        
+    Returns:
+        None. Saves HTML report to output_dir/eda_report.html.
+        
+    Assumptions:
+        - Output directory exists and is writable
+        - Stats and hypothesis_results dictionaries are properly formatted
+    """
     html_content = f"""
     <!DOCTYPE html>
     <html>
@@ -426,44 +514,51 @@ def generate_report(df: pd.DataFrame, stats: dict, hypothesis_results: dict,
     """
     
     output_path = output_dir / "eda_report.html"
-    with open(output_path, 'w') as f:
+    with open(output_path, 'w', encoding='utf-8') as f:
         f.write(html_content)
     
-    print(f"EDA report saved to {output_path}")
+    logger.info(f"EDA report saved to {output_path}")
 
 
 def main():
-    """Main EDA pipeline."""
-    print("Starting EDA...")
+    """
+    Main EDA pipeline execution.
+    
+    Orchestrates data loading, statistics generation, visualization creation,
+    hypothesis testing, and report generation.
+    """
+    logger.info("=" * 60)
+    logger.info("Starting EDA Pipeline")
+    logger.info("=" * 60)
     
     # Load data
     df = load_processed_data()
     
     if df.empty:
-        print("No data available for EDA")
+        logger.warning("No data available for EDA")
         # Create empty report
         generate_report(pd.DataFrame(), {}, {}, INTERIM_REPORTS_DIR)
         return
     
     # Generate statistics
     stats = generate_summary_statistics(df)
-    print(f"Dataset shape: {stats['shape']}")
+    logger.info(f"Dataset shape: {stats['shape']}")
     
     # Create visualizations
     create_visualizations(df, INTERIM_REPORTS_DIR)
-    print("Visualizations created")
+    logger.info("Visualizations created")
     
     # Perform hypothesis tests
     hypothesis_results = perform_hypothesis_tests(df)
-    print(f"Performed {len(hypothesis_results)} hypothesis tests")
+    logger.info(f"Performed {len(hypothesis_results)} hypothesis tests")
     
     # Identify low-risk groups
     low_risk_groups = identify_low_risk_groups(df)
     if not low_risk_groups.empty:
-        print(f"Identified {len(low_risk_groups)} low-risk groups")
+        logger.info(f"Identified {len(low_risk_groups)} low-risk groups")
         low_risk_path = INTERIM_REPORTS_DIR / "low_risk_groups.csv"
         low_risk_groups.to_csv(low_risk_path, index=False)
-        print(f"Low-risk groups saved to {low_risk_path}")
+        logger.info(f"Low-risk groups saved to {low_risk_path}")
     
     # Save features for modeling
     features_path = PROCESSED_DATA_DIR / "eda_features.pkl"
@@ -473,11 +568,12 @@ def main():
             'hypothesis_results': hypothesis_results,
             'low_risk_groups': low_risk_groups.to_dict('records') if not low_risk_groups.empty else []
         }, f)
-    print(f"Features saved to {features_path}")
+    logger.info(f"Features saved to {features_path}")
     
     # Generate report
     generate_report(df, stats, hypothesis_results, INTERIM_REPORTS_DIR)
-    print("EDA complete!")
+    logger.info("EDA complete!")
+    logger.info("=" * 60)
 
 
 if __name__ == "__main__":

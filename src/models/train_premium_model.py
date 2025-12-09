@@ -14,21 +14,48 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 sys.path.append(str(Path(__file__).parent.parent))
 
 from utils.config import PROCESSED_DATA_DIR, MODELS_DIR, INTERIM_REPORTS_DIR, RANDOM_SEED
+from utils.logger import logger
 
 
 def load_data() -> pd.DataFrame:
-    """Load processed insurance data."""
+    """
+    Load processed insurance data for premium model training.
+    
+    Returns:
+        DataFrame with cleaned insurance data. Empty DataFrame if file not found.
+        
+    Assumptions:
+        - Processed data file exists at expected location
+    """
     filepath = PROCESSED_DATA_DIR / "insurance_cleaned.csv"
     
     if not filepath.exists():
-        print(f"Warning: {filepath} not found.")
+        logger.warning(f"{filepath} not found.")
         return pd.DataFrame()
     
+    logger.info(f"Loading data from {filepath}")
     return pd.read_csv(filepath)
 
 
 def calculate_optimal_premium(df: pd.DataFrame) -> pd.Series:
-    """Calculate optimal premium based on risk factors and loss ratio."""
+    """
+    Calculate optimal premium based on risk factors and target loss ratio.
+    
+    Uses target loss ratio of 0.7 (70%) to determine premium that covers
+    expected claims plus margin. Blends claims-based calculation with
+    historical premium if available.
+    
+    Args:
+        df: DataFrame with TotalClaims and optionally TotalPremium columns.
+        
+    Returns:
+        Series of calculated optimal premiums. Empty Series if insufficient data.
+        
+    Assumptions:
+        - TotalClaims or TotalPremium column exists
+        - Target loss ratio of 0.7 is appropriate
+        - Minimum premium is 10% above claims
+    """
     # Premium should cover expected claims plus margin
     # Target loss ratio of 0.7 (70%) means we want premium to be claims / 0.7
     target_loss_ratio = 0.7
@@ -54,7 +81,25 @@ def calculate_optimal_premium(df: pd.DataFrame) -> pd.Series:
 
 
 def prepare_features(df: pd.DataFrame) -> tuple:
-    """Prepare features and target for premium recommendation."""
+    """
+    Prepare features and target for premium recommendation model.
+    
+    Calculates optimal premium as target and encodes categorical variables.
+    
+    Args:
+        df: DataFrame with insurance data.
+        
+    Returns:
+        Tuple of (X, y, feature_cols, df_encoded):
+        - X: Feature matrix
+        - y: Target vector (optimal premium)
+        - feature_cols: List of feature column names
+        - df_encoded: DataFrame with encoded categorical variables
+        
+    Assumptions:
+        - Optimal premium can be calculated from available columns
+        - Categorical variables can be one-hot encoded
+    """
     if df.empty:
         return None, None, None, None
     
@@ -62,7 +107,7 @@ def prepare_features(df: pd.DataFrame) -> tuple:
     optimal_premium = calculate_optimal_premium(df)
     
     if optimal_premium.empty:
-        print("Warning: Could not calculate optimal premium")
+        logger.warning("Could not calculate optimal premium")
         return None, None, None, None
     
     # Select features (exclude target-related columns)
@@ -87,7 +132,20 @@ def prepare_features(df: pd.DataFrame) -> tuple:
 
 
 def train_model(X: pd.DataFrame, y: pd.Series) -> GradientBoostingRegressor:
-    """Train Gradient Boosting model for premium recommendation."""
+    """
+    Train Gradient Boosting regressor for premium recommendation.
+    
+    Args:
+        X: Feature matrix (training data).
+        y: Target vector (optimal premium).
+        
+    Returns:
+        Trained GradientBoostingRegressor model.
+        
+    Assumptions:
+        - X and y have matching indices
+        - No missing values in X or y
+    """
     model = GradientBoostingRegressor(
         n_estimators=100,
         learning_rate=0.1,
@@ -100,7 +158,23 @@ def train_model(X: pd.DataFrame, y: pd.Series) -> GradientBoostingRegressor:
 
 
 def evaluate_model(model, X_test: pd.DataFrame, y_test: pd.Series) -> dict:
-    """Evaluate model performance."""
+    """
+    Evaluate model performance using regression metrics.
+    
+    Calculates RMSE, MAE, R², and Mean Absolute Percentage Error.
+    
+    Args:
+        model: Trained model with predict() method.
+        X_test: Test feature matrix.
+        y_test: Test target vector.
+        
+    Returns:
+        Dictionary of metric_name -> metric_value.
+        
+    Assumptions:
+        - Model has been trained
+        - X_test and y_test have matching indices
+    """
     y_pred = model.predict(X_test)
     
     metrics = {
@@ -115,13 +189,13 @@ def evaluate_model(model, X_test: pd.DataFrame, y_test: pd.Series) -> dict:
 
 def main():
     """Main training pipeline."""
-    print("Training premium recommendation model...")
+    logger.info("Training premium recommendation model...")
     
     # Load data
     df = load_data()
     
     if df.empty:
-        print("No data available for training")
+        logger.warning("No data available for training")
         # Create empty metrics file
         metrics = {'error': 'No data available'}
         output_path = INTERIM_REPORTS_DIR / "premium_model_metrics.json"
@@ -133,11 +207,11 @@ def main():
     X, y, feature_cols, df_encoded = prepare_features(df)
     
     if X is None or y is None:
-        print("Failed to prepare features")
+        logger.error("Failed to prepare features")
         return
     
-    print(f"Features: {len(feature_cols)}")
-    print(f"Samples: {len(X)}")
+    logger.info(f"Features: {len(feature_cols)}")
+    logger.info(f"Samples: {len(X)}")
     
     # Split data
     X_train, X_test, y_train, y_test = train_test_split(
@@ -146,18 +220,18 @@ def main():
     
     # Train model
     model = train_model(X_train, y_train)
-    print("Model trained")
+    logger.info("Model trained")
     
     # Evaluate model
     metrics = evaluate_model(model, X_test, y_test)
-    print(f"Model Metrics:")
+    logger.info("Model Metrics:")
     for key, value in metrics.items():
-        print(f"  {key.upper()}: {value:.4f}")
+        logger.info(f"  {key.upper()}: {value:.4f}")
     
     # Save model
     model_path = MODELS_DIR / "premium_model.pkl"
     joblib.dump(model, model_path)
-    print(f"Model saved to {model_path}")
+    logger.info(f"Model saved to {model_path}")
     
     # Save feature names
     feature_path = MODELS_DIR / "premium_model_features.pkl"

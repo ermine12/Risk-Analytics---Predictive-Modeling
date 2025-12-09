@@ -13,20 +13,41 @@ from utils.logger import logger
 
 
 def load_data(filepath: str = None) -> pd.DataFrame:
-    """Load raw insurance data."""
+    """
+    Load raw insurance data from CSV file.
+    
+    Args:
+        filepath: Optional path to data file. If None, uses default location.
+        
+    Returns:
+        DataFrame with insurance data. Empty DataFrame if file not found.
+        
+    Assumptions:
+        - CSV file exists and is readable
+        - File contains insurance-related columns
+    """
     if filepath is None:
         filepath = RAW_DATA_DIR / "insurance.csv"
     
     if not Path(filepath).exists():
-        print(f"Warning: {filepath} not found. Creating sample data structure.")
+        logger.warning(f"{filepath} not found. Creating sample data structure.")
         return create_sample_structure()
     
+    logger.info(f"Loading data from {filepath}")
     return pd.read_csv(filepath)
 
 
 def create_sample_structure() -> pd.DataFrame:
-    """Create sample data structure for testing."""
-    print("Creating sample data structure...")
+    """
+    Create empty DataFrame with expected insurance data structure.
+    
+    Returns:
+        Empty DataFrame with expected column names for insurance data.
+        
+    Note:
+        Used when actual data file is not available for testing purposes.
+    """
+    logger.info("Creating sample data structure...")
     return pd.DataFrame({
         'TransactionMonth': [],
         'TotalClaims': [],
@@ -126,7 +147,28 @@ def clean_data(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def prepare_features(df: pd.DataFrame) -> pd.DataFrame:
-    """Prepare features for modeling with feature engineering."""
+    """
+    Engineer features for modeling.
+    
+    Creates derived features including:
+    - Date parsing and extraction (year, month)
+    - Loss ratio calculation
+    - Vehicle age (if registration year available)
+    - Vehicle value bins
+    - Time since vehicle introduction
+    - Interaction features (Gender×VehicleType, Make×YearBucket)
+    - Historical aggregates per policy
+    
+    Args:
+        df: Input DataFrame with raw/cleaned insurance data.
+        
+    Returns:
+        DataFrame with original columns plus engineered features.
+        
+    Assumptions:
+        - Date columns can be parsed as datetime
+        - Numeric columns exist for calculations
+    """
     df = df.copy()
     
     # Parse date

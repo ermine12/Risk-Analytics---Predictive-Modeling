@@ -41,7 +41,22 @@ except ImportError:
 
 
 def normalize_data_for_modeling(df: pd.DataFrame) -> pd.DataFrame:
-    """Normalize column names to handle different data formats."""
+    """
+    Normalize column names to standardize different data formats.
+    
+    Maps common variations (region→Province, charges→TotalClaims, sex→Gender)
+    and estimates TotalPremium if missing.
+    
+    Args:
+        df: Input DataFrame with potentially non-standard column names.
+        
+    Returns:
+        DataFrame with normalized column names and estimated TotalPremium if needed.
+        
+    Assumptions:
+        - Standard insurance dataset uses 'charges' for claims
+        - Premium can be estimated as claims * 1.2 (20% margin)
+    """
     df = df.copy()
     
     # Map standard insurance dataset columns
@@ -68,7 +83,25 @@ def normalize_data_for_modeling(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def prepare_modeling_data(df: pd.DataFrame) -> tuple:
-    """Prepare data for modeling with feature engineering and encoding."""
+    """
+    Prepare data for machine learning modeling.
+    
+    Performs feature engineering, missing value imputation, and categorical encoding.
+    
+    Args:
+        df: Input DataFrame with insurance data.
+        
+    Returns:
+        Tuple of (processed_df, feature_columns, label_encoders):
+        - processed_df: DataFrame with engineered features
+        - feature_columns: List of feature column names for modeling
+        - label_encoders: Dict mapping column names to LabelEncoder objects
+        
+    Assumptions:
+        - Missing numeric values can be imputed with median
+        - Categorical variables can be label-encoded
+        - Target columns (TotalClaims, TotalPremium) are excluded from features
+    """
     logger.info("Preparing data for modeling...")
     df = normalize_data_for_modeling(df)
     
@@ -133,9 +166,25 @@ def prepare_modeling_data(df: pd.DataFrame) -> tuple:
 
 def train_claim_severity_model(df: pd.DataFrame, feature_cols: list) -> dict:
     """
-    Train model to predict TotalClaims for policies with claims > 0.
-    Target: TotalClaims (subset where claims > 0)
-    Metrics: RMSE, R-squared
+    Train models to predict claim severity (TotalClaims amount).
+    
+    Trains Linear Regression and Random Forest models on policies with claims above median.
+    Evaluates using RMSE, R², and MAE metrics.
+    
+    Args:
+        df: DataFrame with insurance data including TotalClaims column.
+        feature_cols: List of feature column names to use for modeling.
+        
+    Returns:
+        Dictionary containing:
+        - 'models': Dict of model_name -> {model, metrics}
+        - 'best_model': Name of best-performing model
+        - 'feature_importance': List of top features with importance scores
+        
+    Assumptions:
+        - TotalClaims column exists in df
+        - Uses median threshold to define "claims" subset
+        - 80:20 train-test split with random_state=42
     """
     logger.info("Training Claim Severity Prediction Model...")
     
@@ -260,8 +309,24 @@ def train_claim_severity_model(df: pd.DataFrame, feature_cols: list) -> dict:
 
 def train_premium_model(df: pd.DataFrame, feature_cols: list) -> dict:
     """
-    Train model to predict optimal premium.
-    Target: TotalPremium (or calculated premium)
+    Train models to predict optimal insurance premium.
+    
+    Trains Linear Regression and Random Forest models to predict TotalPremium.
+    Used for premium optimization and pricing decisions.
+    
+    Args:
+        df: DataFrame with insurance data including TotalPremium column.
+        feature_cols: List of feature column names to use for modeling.
+        
+    Returns:
+        Dictionary containing:
+        - 'models': Dict of model_name -> {model, metrics}
+        - 'best_model': Name of best-performing model (lowest RMSE)
+        
+    Assumptions:
+        - TotalPremium column exists in df
+        - Premium is numeric and positive
+        - 80:20 train-test split with random_state=42
     """
     logger.info("Training Premium Optimization Model...")
     
@@ -322,8 +387,24 @@ def train_premium_model(df: pd.DataFrame, feature_cols: list) -> dict:
 
 def train_claim_probability_model(df: pd.DataFrame, feature_cols: list) -> dict:
     """
-    Train binary classification model to predict probability of claim occurring.
-    Target: Binary (1 if TotalClaims > 0, else 0)
+    Train binary classification model to predict claim probability.
+    
+    Predicts whether a policy will have a claim (1) or not (0) based on policyholder
+    and vehicle characteristics.
+    
+    Args:
+        df: DataFrame with insurance data including TotalClaims column.
+        feature_cols: List of feature column names to use for modeling.
+        
+    Returns:
+        Dictionary containing:
+        - 'models': Dict of model_name -> {model, metrics}
+        - 'best_model': Name of best-performing model (highest F1-score)
+        
+    Assumptions:
+        - Binary target created as (TotalClaims > median)
+        - Stratified train-test split to maintain class balance
+        - 80:20 split with random_state=42
     """
     logger.info("Training Claim Probability Model (Binary Classification)...")
     
@@ -394,8 +475,24 @@ def train_claim_probability_model(df: pd.DataFrame, feature_cols: list) -> dict:
 
 def calculate_risk_based_premium(df: pd.DataFrame, prob_model, severity_model, feature_cols: list) -> pd.Series:
     """
-    Calculate Risk-Based Premium using:
-    Premium = (Predicted Probability of Claim * Predicted Claim Severity) + Expense Loading + Profit Margin
+    Calculate risk-based premium using probability and severity models.
+    
+    Formula: Premium = (Probability × Severity) × (1 + Expense Loading + Profit Margin)
+    Where Expense Loading = 20% and Profit Margin = 15%.
+    
+    Args:
+        df: DataFrame with policy data.
+        prob_model: Trained model predicting claim probability (0-1).
+        severity_model: Trained model predicting claim severity (dollar amount).
+        feature_cols: List of feature column names.
+        
+    Returns:
+        Series of calculated risk-based premiums, indexed by df index.
+        
+    Assumptions:
+        - Models are already trained and can predict on df[feature_cols]
+        - Probability model outputs probabilities between 0 and 1
+        - Severity model outputs non-negative dollar amounts
     """
     logger.info("Calculating Risk-Based Premium...")
     
