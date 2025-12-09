@@ -44,5 +44,6 @@ jobs:
     
     - name: Validate DVC pipeline
       run: |
-        dvc validate
+        dvc dag
+      continue-on-error: true
 

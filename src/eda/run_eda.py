@@ -45,12 +45,92 @@ def generate_summary_statistics(df: pd.DataFrame) -> dict:
 
 
 def create_visualizations(df: pd.DataFrame, output_dir: Path):
-    """Create EDA visualizations - 3 creative plots."""
+    """Create EDA visualizations - 3 creative plots + bar charts + box plots."""
     if df.empty:
         print("No data available for visualization")
         return
     
     plt.style.use('seaborn-v0_8')
+    
+    # BAR CHARTS for key categorical variables
+    categorical_cols = df.select_dtypes(include=['object']).columns
+    for col in categorical_cols[:5]:  # Top 5 categorical variables
+        if col in df.columns:
+            value_counts = df[col].value_counts().head(10)  # Top 10 categories
+            if len(value_counts) > 0:
+                fig, ax = plt.subplots(figsize=(12, 6))
+                bars = ax.bar(range(len(value_counts)), value_counts.values, 
+                             color=plt.cm.Set3(np.linspace(0, 1, len(value_counts))))
+                ax.set_xlabel(col, fontsize=12, fontweight='bold')
+                ax.set_ylabel('Count', fontsize=12, fontweight='bold')
+                ax.set_title(f'Distribution of {col}', fontsize=14, fontweight='bold')
+                ax.set_xticks(range(len(value_counts)))
+                ax.set_xticklabels(value_counts.index, rotation=45, ha='right')
+                ax.grid(axis='y', alpha=0.3, linestyle='--')
+                
+                # Add value labels on bars
+                for i, v in enumerate(value_counts.values):
+                    ax.text(i, v, str(v), ha='center', va='bottom', fontweight='bold')
+                
+                plt.tight_layout()
+                plt.savefig(output_dir / f'bar_chart_{col}.png', dpi=300, bbox_inches='tight')
+                plt.close()
+                print(f"Created: Bar chart for {col}")
+    
+    # BOX PLOTS for critical numeric features to detect outliers
+    critical_numeric = ['TotalPremium', 'TotalClaims']
+    for col in critical_numeric:
+        if col in df.columns:
+            fig, ax = plt.subplots(figsize=(10, 6))
+            bp = ax.boxplot(df[col].dropna(), vert=True, patch_artist=True,
+                           showmeans=True, meanline=True)
+            
+            # Color the boxes
+            for patch in bp['boxes']:
+                patch.set_facecolor('lightblue')
+                patch.set_alpha(0.7)
+            
+            ax.set_ylabel(f'{col} ($)', fontsize=12, fontweight='bold')
+            ax.set_title(f'Box Plot: {col} (Outlier Detection)', 
+                        fontsize=14, fontweight='bold')
+            ax.grid(axis='y', alpha=0.3, linestyle='--')
+            
+            # Add statistics text
+            q1 = df[col].quantile(0.25)
+            q3 = df[col].quantile(0.75)
+            iqr = q3 - q1
+            outliers = df[(df[col] < q1 - 1.5*iqr) | (df[col] > q3 + 1.5*iqr)][col]
+            
+            stats_text = f"Q1: ${q1:,.0f}\nQ3: ${q3:,.0f}\nIQR: ${iqr:,.0f}\nOutliers: {len(outliers)}"
+            ax.text(0.02, 0.98, stats_text, transform=ax.transAxes,
+                   verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5),
+                   fontsize=10)
+            
+            plt.tight_layout()
+            plt.savefig(output_dir / f'boxplot_{col}.png', dpi=300, bbox_inches='tight')
+            plt.close()
+            print(f"Created: Box plot for {col} (found {len(outliers)} outliers)")
+    
+    # Box plots by categorical variable (if available)
+    if 'Province' in df.columns and 'TotalClaims' in df.columns:
+        fig, ax = plt.subplots(figsize=(14, 8))
+        provinces = df['Province'].value_counts().head(10).index
+        data_to_plot = [df[df['Province'] == prov]['TotalClaims'].dropna() for prov in provinces]
+        bp = ax.boxplot(data_to_plot, labels=provinces, patch_artist=True, showmeans=True)
+        
+        for patch in bp['boxes']:
+            patch.set_facecolor('lightcoral')
+            patch.set_alpha(0.7)
+        
+        ax.set_xlabel('Province', fontsize=12, fontweight='bold')
+        ax.set_ylabel('Total Claims ($)', fontsize=12, fontweight='bold')
+        ax.set_title('Box Plot: Total Claims by Province', fontsize=14, fontweight='bold')
+        plt.xticks(rotation=45, ha='right')
+        plt.grid(axis='y', alpha=0.3, linestyle='--')
+        plt.tight_layout()
+        plt.savefig(output_dir / 'boxplot_claims_by_province.png', dpi=300, bbox_inches='tight')
+        plt.close()
+        print("Created: Box plot for Total Claims by Province")
     
     # 1. Loss Ratio by Province (Creative Plot 1)
     if 'Province' in df.columns and 'loss_ratio' in df.columns:
