@@ -1,0 +1,108 @@
+{
+  "claim_severity": {
+    "models": {
+      "Linear Regression": {
+        "model": "LinearRegression()",
+        "metrics": {
+          "train_rmse": 7364.336416469086,
+          "test_rmse": 7953.813109304763,
+          "train_r2": 0.640050552115731,
+          "test_r2": 0.5318503329358005,
+          "train_mae": 5857.627846317881,
+          "test_mae": 6567.98676740994
+        }
+      },
+      "Random Forest": {
+        "model": "RandomForestRegressor(max_depth=10, n_estimators=200, n_jobs=-1,\n                      random_state=42)",
+        "metrics": {
+          "train_rmse": 2013.5302367674951,
+          "test_rmse": 5635.73271452094,
+          "train_r2": 0.9730914321599502,
+          "test_r2": 0.7649638146401353,
+          "train_mae": 1154.838939188342,
+          "test_mae": 3394.2721690181934
+        }
+      },
+      "feature_importance": [
+        {
+          "feature": "smoker_encoded",
+          "importance": 0.5369345660431148
+        },
+        {
+          "feature": "bmi",
+          "importance": 0.3269183227577395
+        },
+        {
+          "feature": "age",
+          "importance": 0.08902979768678494
+        },
+        {
+          "feature": "children",
+          "importance": 0.018852599945489625
+        },
+        {
+          "feature": "age_bin_encoded",
+          "importance": 0.008218131792755778
+        },
+        {
+          "feature": "region_encoded",
+          "importance": 0.00648758151446048
+        },
+        {
+          "feature": "Province_encoded",
+          "importance": 0.005939668712751805
+        },
+        {
+          "feature": "bmi_category_encoded",
+          "importance": 0.003239870717779899
+        },
+        {
+          "feature": "Gender_encoded",
+          "importance": 0.002332404399861024
+        },
+        {
+          "feature": "sex_encoded",
+          "importance": 0.0020470564292622228
+        }
+      ]
+    },
+    "best_model": "Random Forest",
+    "feature_importance": []
+  },
+  "premium_optimization": {
+    "models": {
+      "Linear Regression": {
+        "model": "LinearRegression()",
+        "metrics": {
+          "test_rmse": 7210.6537512718205,
+          "test_r2": 0.8035078922578314,
+          "test_mae": 5034.954040831857
+        }
+      },
+      "Random Forest": {
+        "model": "RandomForestRegressor(max_depth=10, n_estimators=200, n_jobs=-1,\n                      random_state=42)",
+        "metrics": {
+          "test_rmse": 5482.952077173601,
+          "test_r2": 0.8863878632104989,
+          "test_mae": 3046.465446757874
+        }
+      }
+    },
+    "best_model": "Random Forest"
+  },
+  "claim_probability": {
+    "models": {
+      "Random Forest": {
+        "model": "RandomForestClassifier(max_depth=10, n_estimators=200, n_jobs=-1,\n                       random_state=42)",
+        "metrics": {
+          "accuracy": 1.0,
+          "precision": 1.0,
+          "recall": 1.0,
+          "f1_score": 1.0,
+          "roc_auc": 0.0
+        }
+      }
+    },
+    "best_model": "Random Forest"
+  }
+}
