@@ -174,17 +174,70 @@ See `.github/workflows/ci.yml` for details.
 
 ## 🤝 Contributing
 
-### Branching Strategy
+### Git Workflow & Pull Requests
 
-- `main`: Production-ready code
-- `task-1`: Initial development branch
-- `task-2`: Feature branch (created from task-1)
+This project uses a **Pull Request (PR) workflow** for all changes. All task branches must be merged into `main` via Pull Requests.
 
-### Commit Guidelines
+#### Branching Strategy
+
+- `main`: Production-ready code (protected branch)
+- `task-1`, `task-2`, `task-3`, etc.: Task branches for specific features
+- `feature/description`: Feature branches for new functionality
+- `fix/description`: Bug fix branches
+
+#### Workflow Steps
+
+1. **Create a task branch:**
+   ```bash
+   git checkout -b task-X
+   ```
+
+2. **Make changes and commit:**
+   ```bash
+   git add .
+   git commit -m "task-X: descriptive commit message"
+   ```
+
+3. **Push to remote:**
+   ```bash
+   git push origin task-X
+   ```
+
+4. **Create Pull Request:**
+   - Go to GitHub repository
+   - Click "Pull Requests" → "New Pull Request"
+   - Select base: `main`, compare: `task-X`
+   - Fill out PR template with:
+     - Description of changes
+     - Testing performed
+     - Business impact
+     - DVC pipeline changes (if any)
+
+5. **Review Process:**
+   - Code is reviewed using [Code Review Guidelines](.github/CODE_REVIEW_GUIDELINES.md)
+   - Address feedback and re-request review
+   - CI/CD checks must pass
+
+6. **Merge:**
+   - After approval, merge via GitHub UI (usually "Squash and Merge")
+   - Delete branch after merge
+
+#### Commit Guidelines
 
 - Commit at least 3x per day while working
-- Use descriptive messages: `task-1: eda - missing values cleanup`
-- Create PRs for merging feature branches
+- Use descriptive messages: `task-X: eda - missing values cleanup`
+- Format: `task-X: brief description of changes`
+
+#### PR Requirements
+
+- ✅ All CI/CD checks pass
+- ✅ Code follows style guidelines
+- ✅ Tests are passing
+- ✅ Documentation is updated
+- ✅ PR template is filled out
+- ✅ At least one approval (if required)
+
+**See [Pull Request Guide](.github/PULL_REQUEST_GUIDE.md) for detailed instructions.**
 
 ## 📄 License
 
