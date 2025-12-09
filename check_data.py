@@ -31,7 +31,7 @@ def check_data_file():
         
         print(f"\n📋 Columns ({len(df.columns)}):")
         for i, col in enumerate(df.columns, 1):
-            dtype = df[col].dtype
+            dtype = str(df[col].dtype)
             null_count = df[col].isnull().sum()
             null_pct = (null_count / len(df)) * 100
             print(f"   {i:2d}. {col:25s} ({dtype:10s}) - {null_count:4d} nulls ({null_pct:5.2f}%)")
