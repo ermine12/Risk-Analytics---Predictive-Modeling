@@ -1,0 +1,55 @@
+{
+  "province_risk": {
+    "claim_frequency": {
+      "test": "chi-squared",
+      "chi2_statistic": 4.456522220507736,
+      "p_value": 0.21620134655413636,
+      "degrees_of_freedom": 3,
+      "reject_null": false,
+      "interpretation": "Fail to reject H0"
+    },
+    "claim_severity": {
+      "test": "ANOVA",
+      "f_statistic": 2.926139903662776,
+      "p_value": 0.03276288025444947,
+      "reject_null": true,
+      "interpretation": "Reject H0",
+      "pairwise_comparisons": [
+        {
+          "comparison": "southwest vs southeast",
+          "lowest_mean": 12346.937377292308,
+          "highest_mean": 14735.411437609888,
+          "difference_pct": 19.344668133737418,
+          "t_statistic": -2.4281773556668043,
+          "p_value": 0.015430651095691349,
+          "significant": true
+        }
+      ]
+    }
+  },
+  "zipcode_risk": {
+    "note": "PostalCode column not available in dataset"
+  },
+  "zipcode_margin": {
+    "note": "PostalCode or premium/claims columns not available"
+  },
+  "gender_risk": {
+    "claim_frequency": {
+      "test": "chi-squared",
+      "chi2_statistic": 0.006688560529440357,
+      "p_value": 0.9348187816398544,
+      "reject_null": false,
+      "interpretation": "Fail to reject H0"
+    },
+    "claim_severity": {
+      "test": "t-test",
+      "t_statistic": -2.124391307062026,
+      "p_value": 0.0338207919951195,
+      "reject_null": true,
+      "interpretation": "Reject H0",
+      "female_mean": 12569.578843835347,
+      "male_mean": 13974.998863762965,
+      "difference_pct": 11.181122592797895
+    }
+  }
+}

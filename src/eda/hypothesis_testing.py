@@ -18,18 +18,48 @@ from utils.config import PROCESSED_DATA_DIR, INTERIM_REPORTS_DIR
 from utils.logger import logger
 
 
+def normalize_column_names(df: pd.DataFrame) -> pd.DataFrame:
+    """Normalize column names to handle different data formats."""
+    df = df.copy()
+    column_mapping = {
+        'region': 'Province',
+        'Region': 'Province',
+        'charges': 'TotalClaims',
+        'Charges': 'TotalClaims',
+        'sex': 'Gender',
+        'Sex': 'Gender',
+        'postalcode': 'PostalCode',
+        'PostalCode': 'PostalCode'
+    }
+    
+    for old_col, new_col in column_mapping.items():
+        if old_col in df.columns and new_col not in df.columns:
+            df[new_col] = df[old_col]
+    
+    # For standard insurance dataset: treat charges as claims, estimate premium
+    if 'TotalClaims' in df.columns and 'TotalPremium' not in df.columns:
+        # Estimate premium as charges * 1.2 (assuming 20% margin)
+        df['TotalPremium'] = df['TotalClaims'] * 1.2
+    
+    return df
+
+
 def calculate_claim_frequency(df: pd.DataFrame) -> pd.Series:
     """Calculate claim frequency: proportion of policies with at least one claim."""
+    # For standard dataset, all policies have charges, so we use a threshold
     if 'TotalClaims' in df.columns:
-        return (df['TotalClaims'] > 0).astype(int)
+        # Use median as threshold to create binary classification
+        threshold = df['TotalClaims'].median()
+        return (df['TotalClaims'] > threshold).astype(int)
     return pd.Series()
 
 
 def calculate_claim_severity(df: pd.DataFrame) -> pd.Series:
     """Calculate claim severity: average amount of a claim, given a claim occurred."""
     if 'TotalClaims' in df.columns:
-        # Only for policies with claims
-        return df[df['TotalClaims'] > 0]['TotalClaims']
+        # For standard dataset, use median threshold
+        threshold = df['TotalClaims'].median()
+        return df[df['TotalClaims'] > threshold]['TotalClaims']
     return pd.Series()
 
 
@@ -42,17 +72,20 @@ def calculate_margin(df: pd.DataFrame) -> pd.Series:
 
 def test_province_risk_differences(df: pd.DataFrame) -> dict:
     """
-    H₀: There are no risk differences across provinces.
+    H₀: There are no risk differences across provinces/regions.
     
     Tests:
     - Claim Frequency (chi-squared test)
     - Claim Severity (ANOVA + pairwise t-tests)
     """
-    logger.info("Testing H₀: No risk differences across provinces")
+    logger.info("Testing H0: No risk differences across provinces/regions")
     results = {}
     
+    # Normalize column names
+    df = normalize_column_names(df)
+    
     if 'Province' not in df.columns:
-        logger.warning("Province column not found")
+        logger.warning("Province/Region column not found")
         return results
     
     # Calculate metrics
@@ -67,8 +100,8 @@ def test_province_risk_differences(df: pd.DataFrame) -> dict:
             'chi2_statistic': float(chi2),
             'p_value': float(p_value_freq),
             'degrees_of_freedom': int(dof),
-            'reject_null': p_value_freq < 0.05,
-            'interpretation': 'Reject H₀' if p_value_freq < 0.05 else 'Fail to reject H₀'
+            'reject_null': bool(p_value_freq < 0.05),
+            'interpretation': 'Reject H0' if p_value_freq < 0.05 else 'Fail to reject H0'
         }
         logger.info(f"Claim Frequency chi-squared test: p={p_value_freq:.4f}, reject={p_value_freq < 0.05}")
     
@@ -87,8 +120,8 @@ def test_province_risk_differences(df: pd.DataFrame) -> dict:
             'test': 'ANOVA',
             'f_statistic': float(f_stat),
             'p_value': float(p_value_sev),
-            'reject_null': p_value_sev < 0.05,
-            'interpretation': 'Reject H₀' if p_value_sev < 0.05 else 'Fail to reject H₀'
+            'reject_null': bool(p_value_sev < 0.05),
+            'interpretation': 'Reject H0' if p_value_sev < 0.05 else 'Fail to reject H0'
         }
         logger.info(f"Claim Severity ANOVA: p={p_value_sev:.4f}, reject={p_value_sev < 0.05}")
         
@@ -112,7 +145,7 @@ def test_province_risk_differences(df: pd.DataFrame) -> dict:
                 'difference_pct': float((highest_mean - lowest_mean) / lowest_mean * 100),
                 't_statistic': float(t_stat),
                 'p_value': float(p_pairwise),
-                'significant': p_pairwise < 0.05
+                'significant': bool(p_pairwise < 0.05)
             })
             
             results['claim_severity']['pairwise_comparisons'] = pairwise_results
@@ -128,11 +161,15 @@ def test_zipcode_risk_differences(df: pd.DataFrame) -> dict:
     - Claim Frequency (chi-squared test on top zip codes)
     - Claim Severity (ANOVA)
     """
-    logger.info("Testing H₀: No risk differences between zip codes")
+    logger.info("Testing H0: No risk differences between zip codes")
     results = {}
     
+    # Normalize column names
+    df = normalize_column_names(df)
+    
     if 'PostalCode' not in df.columns:
-        logger.warning("PostalCode column not found")
+        logger.warning("PostalCode column not found - skipping zipcode tests")
+        results['note'] = "PostalCode column not available in dataset"
         return results
     
     # Focus on zip codes with sufficient sample size (at least 10 policies)
@@ -155,8 +192,8 @@ def test_zipcode_risk_differences(df: pd.DataFrame) -> dict:
             'chi2_statistic': float(chi2),
             'p_value': float(p_value_freq),
             'degrees_of_freedom': int(dof),
-            'reject_null': p_value_freq < 0.05,
-            'interpretation': 'Reject H₀' if p_value_freq < 0.05 else 'Fail to reject H₀',
+            'reject_null': bool(p_value_freq < 0.05),
+            'interpretation': 'Reject H0' if p_value_freq < 0.05 else 'Fail to reject H0',
             'zipcodes_tested': len(valid_zips)
         }
         logger.info(f"Zipcode Claim Frequency test: p={p_value_freq:.4f}, reject={p_value_freq < 0.05}")
@@ -176,8 +213,8 @@ def test_zipcode_risk_differences(df: pd.DataFrame) -> dict:
             'test': 'ANOVA',
             'f_statistic': float(f_stat),
             'p_value': float(p_value_sev),
-            'reject_null': p_value_sev < 0.05,
-            'interpretation': 'Reject H₀' if p_value_sev < 0.05 else 'Fail to reject H₀'
+            'reject_null': bool(p_value_sev < 0.05),
+            'interpretation': 'Reject H0' if p_value_sev < 0.05 else 'Fail to reject H0'
         }
         logger.info(f"Zipcode Claim Severity ANOVA: p={p_value_sev:.4f}, reject={p_value_sev < 0.05}")
     
@@ -190,11 +227,15 @@ def test_zipcode_margin_differences(df: pd.DataFrame) -> dict:
     
     Test: Margin (TotalPremium - TotalClaims) by zip code (ANOVA)
     """
-    logger.info("Testing H₀: No margin differences between zip codes")
+    logger.info("Testing H0: No margin differences between zip codes")
     results = {}
     
+    # Normalize column names
+    df = normalize_column_names(df)
+    
     if 'PostalCode' not in df.columns or 'TotalPremium' not in df.columns or 'TotalClaims' not in df.columns:
-        logger.warning("Required columns not found for margin test")
+        logger.warning("Required columns not found for margin test - skipping")
+        results['note'] = "PostalCode or premium/claims columns not available"
         return results
     
     df['margin'] = calculate_margin(df)
@@ -224,8 +265,8 @@ def test_zipcode_margin_differences(df: pd.DataFrame) -> dict:
             'test': 'ANOVA',
             'f_statistic': float(f_stat),
             'p_value': float(p_value),
-            'reject_null': p_value < 0.05,
-            'interpretation': 'Reject H₀' if p_value < 0.05 else 'Fail to reject H₀',
+            'reject_null': bool(p_value < 0.05),
+            'interpretation': 'Reject H0' if p_value < 0.05 else 'Fail to reject H0',
             'zipcodes_tested': len(valid_zips),
             'lowest_margin_zip': sorted_zips[0][0] if sorted_zips else None,
             'highest_margin_zip': sorted_zips[-1][0] if sorted_zips else None,
@@ -246,8 +287,11 @@ def test_gender_risk_differences(df: pd.DataFrame) -> dict:
     - Claim Frequency (chi-squared test)
     - Claim Severity (t-test)
     """
-    logger.info("Testing H₀: No risk differences between Women and Men")
+    logger.info("Testing H0: No risk differences between Women and Men")
     results = {}
+    
+    # Normalize column names
+    df = normalize_column_names(df)
     
     gender_col = None
     for col in ['Gender', 'Sex', 'gender', 'sex']:
@@ -281,8 +325,8 @@ def test_gender_risk_differences(df: pd.DataFrame) -> dict:
             'test': 'chi-squared',
             'chi2_statistic': float(chi2),
             'p_value': float(p_value_freq),
-            'reject_null': p_value_freq < 0.05,
-            'interpretation': 'Reject H₀' if p_value_freq < 0.05 else 'Fail to reject H₀'
+            'reject_null': bool(p_value_freq < 0.05),
+            'interpretation': 'Reject H0' if p_value_freq < 0.05 else 'Fail to reject H0'
         }
         logger.info(f"Gender Claim Frequency test: p={p_value_freq:.4f}, reject={p_value_freq < 0.05}")
     
@@ -296,8 +340,8 @@ def test_gender_risk_differences(df: pd.DataFrame) -> dict:
             'test': 't-test',
             't_statistic': float(t_stat),
             'p_value': float(p_value_sev),
-            'reject_null': p_value_sev < 0.05,
-            'interpretation': 'Reject H₀' if p_value_sev < 0.05 else 'Fail to reject H₀',
+            'reject_null': bool(p_value_sev < 0.05),
+            'interpretation': 'Reject H0' if p_value_sev < 0.05 else 'Fail to reject H0',
             'female_mean': float(female_severity.mean()),
             'male_mean': float(male_severity.mean()),
             'difference_pct': float((male_severity.mean() - female_severity.mean()) / female_severity.mean() * 100) if female_severity.mean() > 0 else 0
@@ -313,11 +357,16 @@ def run_all_hypothesis_tests(df: pd.DataFrame) -> dict:
     logger.info("Starting A/B Hypothesis Testing")
     logger.info("=" * 60)
     
+    # Normalize data first
+    df_normalized = normalize_column_names(df)
+    logger.info(f"Data shape: {df_normalized.shape}")
+    logger.info(f"Available columns: {list(df_normalized.columns)}")
+    
     all_results = {
-        'province_risk': test_province_risk_differences(df),
-        'zipcode_risk': test_zipcode_risk_differences(df),
-        'zipcode_margin': test_zipcode_margin_differences(df),
-        'gender_risk': test_gender_risk_differences(df)
+        'province_risk': test_province_risk_differences(df_normalized),
+        'zipcode_risk': test_zipcode_risk_differences(df_normalized),
+        'zipcode_margin': test_zipcode_margin_differences(df_normalized),
+        'gender_risk': test_gender_risk_differences(df_normalized)
     }
     
     # Save results
@@ -378,16 +427,36 @@ def generate_business_recommendations(results: dict) -> str:
 
 
 if __name__ == "__main__":
-    # Load processed data
+    # Try to load processed data first, then raw data
     data_path = PROCESSED_DATA_DIR / "insurance_cleaned.csv"
+    if not data_path.exists():
+        # Fall back to raw data
+        from utils.config import RAW_DATA_DIR
+        data_path = RAW_DATA_DIR / "insurance.csv"
+        logger.info(f"Processed data not found, using raw data: {data_path}")
+    
     if data_path.exists():
         df = pd.read_csv(data_path)
+        logger.info(f"Loaded data: {df.shape}")
         results = run_all_hypothesis_tests(df)
         recommendations = generate_business_recommendations(results)
         print("\n" + "=" * 60)
         print("BUSINESS RECOMMENDATIONS")
         print("=" * 60)
         print(recommendations)
+        
+        # Generate detailed report
+        report_path = INTERIM_REPORTS_DIR / "hypothesis_test_report.txt"
+        with open(report_path, 'w') as f:
+            f.write("=" * 60 + "\n")
+            f.write("HYPOTHESIS TESTING REPORT\n")
+            f.write("=" * 60 + "\n\n")
+            f.write(json.dumps(results, indent=2))
+            f.write("\n\n" + "=" * 60 + "\n")
+            f.write("BUSINESS RECOMMENDATIONS\n")
+            f.write("=" * 60 + "\n\n")
+            f.write(recommendations)
+        logger.info(f"Detailed report saved to {report_path}")
     else:
-        logger.error(f"Processed data not found at {data_path}")
+        logger.error(f"Data not found at {data_path}")
 

@@ -28,7 +28,7 @@ def setup_logger(name: str = "insurance_analytics", log_level: str = "INFO") -> 
     logger.addHandler(console_handler)
     
     # File handler
-    file_handler = logging.FileHandler(LOG_DIR / "pipeline.log")
+    file_handler = logging.FileHandler(LOG_DIR / "pipeline.log", encoding='utf-8')
     file_handler.setLevel(logging.DEBUG)
     file_format = logging.Formatter(
         '%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s',
@@ -36,6 +36,17 @@ def setup_logger(name: str = "insurance_analytics", log_level: str = "INFO") -> 
     )
     file_handler.setFormatter(file_format)
     logger.addHandler(file_handler)
+    
+    # Fix Windows console encoding (sys already imported at top)
+    if sys.platform == 'win32':
+        try:
+            import codecs
+            if hasattr(sys.stdout, 'buffer'):
+                sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
+            if hasattr(sys.stderr, 'buffer'):
+                sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
+        except Exception:
+            pass  # Ignore encoding errors on console
     
     return logger
 
